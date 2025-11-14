@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use bytemuck::{Pod, Zeroable};
 
 #[derive(Debug, Default, Clone, Copy, Zeroable, Pod)]
-#[repr(C)]
+#[repr(C, packed(2))]
 pub struct FrameData {
 	pub score_p1: i32,
 	pub score_p2: i32,
@@ -11,6 +11,9 @@ pub struct FrameData {
 	pub game_loop: u8,
 	pub checkpoint: u8,
 	pub difficulty: i8,
+	pub realm: u8,
+	pub checkpoint_sub: u8,
+	pub timer_wave: u32,
 }
 
 impl FrameData {
