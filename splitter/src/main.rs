@@ -25,10 +25,22 @@ mod hook;
 mod system;
 mod ui;
 
+#[allow(unused)]
 const DARK_GREEN: Color32 = Color32::from_rgb(0, 0x4f, 0x4d);
+#[allow(unused)]
 const GREEN: Color32 = Color32::from_rgb(0, 0x94, 0x79);
+#[allow(unused)]
 const LIGHT_ORANGE: Color32 = Color32::from_rgb(0xff, 0xc0, 0x73);
+#[allow(unused)]
 const DARK_ORANGE: Color32 = Color32::from_rgb(0xff, 0x80, 0);
+#[allow(unused)]
+const DARKER_ORANGE: Color32 = Color32::from_rgb(0xdd, 0x59, 0x28);
+#[allow(unused)]
+const ORANGEST: Color32 = Color32::from_rgb(0xad, 0x2f, 0x17);
+#[allow(unused)]
+const DARKER_GREEN: Color32 = Color32::from_rgb(0x00, 0x32, 0x32);
+#[allow(unused)]
+const GREENEST: Color32 = Color32::from_rgb(0x00, 0x1d, 0x23);
 
 static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
@@ -94,6 +106,7 @@ struct ZeroSplitter {
 	dialog_tx: Sender<Option<EntryDialogData>>,
 	comparison: Category,
 	active: bool,
+	relative_score: bool,
 }
 
 impl ZeroSplitter {
@@ -119,6 +132,7 @@ impl ZeroSplitter {
 			waiting_for_confirm: false,
 			comparison: Category::new("<null>".to_string(), Gamemode::GreenOrange),
 			active: false,
+			relative_score: true,
 		}
 	}
 
@@ -258,10 +272,9 @@ impl ZeroSplitter {
 				2 => Some(5),
 				3 => Some(12),
 				4 => Some(19),
-				_ => panic!("Stage out of bounds! {}", frame.stage)
+				_ => panic!("Stage out of bounds! {}", frame.stage),
 			};
-			return
-
+			return;
 		}
 
 		if !frame.is_menu() && self.active {
@@ -309,6 +322,7 @@ impl App for ZeroSplitter {
 		CentralPanel::default().show(ctx, |ui| {
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
+					ui.checkbox(&mut self.relative_score, "").on_hover_text("Use relative (per-split) scores");
 					ui.label("Category: ");
 					ComboBox::from_label("").show_index(ui, &mut self.current_category, self.categories.len(), |i| {
 						&self.categories[i].name
@@ -336,110 +350,97 @@ impl App for ZeroSplitter {
 
 				let cur_category = &self.categories[self.current_category];
 
-				match cur_mode {
-					Gamemode::GreenOrange => {
-						for (i, split) in self.current_run.splits.iter().enumerate() {
-							let stage_n = (i & 3) + 1;
-							let loop_n = (i >> 2) + 1;
-							let best = cur_category.best_splits[i];
-							let stored_best = self.comparison.personal_best.splits[i];
-							let pb = self.comparison.personal_best.splits[i];
+				for (i, split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
+					if self.relative_score {
+						(i, s)
+					} else {
+						(i, self.current_run
+							.splits
+							.iter()
+							.enumerate()
+							.take_while(|&(idx, _)| idx <= i)
+							.fold(0, |acc, (_, &s)| acc + s))
+					}
+				}) {
+					let stage_n = (i & 3) + 1;
+					let loop_n = (i >> 2) + 1;
+					let gold_split = if self.relative_score {
+						cur_category.best_splits[i]
+					} else {
+						cur_category
+							.best_splits
+							.iter()
+							.enumerate()
+							.take_while(|&(idx, _)| idx <= i)
+							.fold(0, |acc, (_, &s)| acc + s)
+					};
+					let pb_split = if self.relative_score {
+						self.comparison.personal_best.splits[i]
+					} else {
+						self.comparison.personal_best.splits
+							.iter()
+							.enumerate()
+							.take_while(|&(idx, _)| idx <= i)
+							.fold(0, |acc, (_, &s)| acc + s)
+					};
 
-							Sides::new().show(
-								ui,
-								|left| {
-									left.label(format!("{}-{}", loop_n, stage_n));
+					Sides::new().show(
+						ui,
+						|left| {
+							match cur_category.mode {
+								Gamemode::GreenOrange => left.label(format!("{}-{}", loop_n, stage_n)),
+								Gamemode::WhiteVanilla => left.label(vanilla_split_names(i)),
+								Gamemode::BlackOnion => todo!(),
+							};
 
-									if best > 0 {
-										left.colored_label(GREEN, best.to_string());
-									}
-								},
-								|right| {
-									if *split != 0 || self.current_split == Some(i) {
-										let split_color = if self.current_split == Some(i) {
-											Color32::WHITE
-										} else {
-											DARK_ORANGE
-										};
+							if gold_split > 0 {
+								left.colored_label(GREEN, gold_split.to_string());
+							}
+						},
+						|right| {
+							if i <= self.current_split.unwrap_or(0) {
+								let split_color = if self.current_split == Some(i) {
+									Color32::WHITE
+								} else if split >= gold_split{
+									DARKER_ORANGE
+								} else {
+									DARK_ORANGE
+								};
 
-										right.colored_label(split_color, split.to_string());
+								if self.relative_score {
+									right.colored_label(split_color, split.to_string());
+								} else {
+									let split_absolute = self.current_run
+										.splits
+										.iter()
+										.enumerate()
+										.take_while(|&(idx, _)| idx <= i)
+										.fold(0, |acc, (_, &s)| acc + s);
+									right.colored_label(split_color, split_absolute.to_string());
+								}
 
-										if self.current_split != Some(i) {
-											// past split, we should show a diff
-											let diff = *split - pb;
-											let diff_color = if *split > stored_best {
-												LIGHT_ORANGE
-											} else if diff >= 0 {
-												Color32::WHITE
-											} else {
-												DARK_GREEN
-											};
-
-											if diff > 0 {
-												right.colored_label(diff_color, format!("+{}", diff));
-											} else {
-												right.colored_label(diff_color, diff.to_string());
-											}
-										}
+								if i < self.current_split.unwrap_or(0) {
+									// past split, we should show a diff
+									let diff = split - pb_split;
+									let diff_color = if diff > 0 {
+										LIGHT_ORANGE
+									} else if diff == 0 {
+										Color32::WHITE
 									} else {
-										right.colored_label(DARK_GREEN, "--");
-									}
-								},
-							);
-						}
-					}
-					Gamemode::WhiteVanilla => {
-						for (i, &split) in self.current_run.splits.iter().enumerate() {
-							let best_this_checkpoint = cur_category.best_splits[i];
-							let stored_best = self.comparison.personal_best.splits[i];
-							let pb = self.comparison.personal_best.splits[i];
+										DARK_GREEN
+									};
 
-							Sides::new().show(
-								ui,
-								|left| {
-									left.label(vanilla_split_names(i));
-
-									if best_this_checkpoint > 0 {
-										left.colored_label(GREEN, best_this_checkpoint.to_string());
-									}
-								},
-								|right| {
-									if split != 0 || self.current_split == Some(i) {
-										let split_color = if self.current_split == Some(i) {
-											Color32::WHITE
-										} else {
-											DARK_ORANGE
-										};
-
-										right.colored_label(split_color, split.to_string());
-
-										if self.current_split != Some(i) {
-											// past split, we should show a diff
-											let diff = split - pb;
-											let diff_color = if split > stored_best {
-												LIGHT_ORANGE
-											} else if diff >= 0 {
-												Color32::WHITE
-											} else {
-												DARK_GREEN
-											};
-
-											if diff > 0 {
-												right.colored_label(diff_color, format!("+{}", diff));
-											} else {
-												right.colored_label(diff_color, diff.to_string());
-											}
-										}
+									if diff > 0 {
+										right.colored_label(diff_color, format!("+{}", diff));
 									} else {
-										right.colored_label(DARK_GREEN, "--");
+										right.colored_label(diff_color, diff.to_string());
 									}
-								},
-							);
-						}
-					}
-					Gamemode::BlackOnion => {
-						todo!()
-					}
+								}
+							} else {
+								right.colored_label(DARK_GREEN, "--");
+							}
+						},
+					);
 				}
 
 				ui.label(format!("Personal Best: {}", cur_category.personal_best.score));
@@ -814,7 +815,7 @@ struct OldRun {
 struct Run {
 	splits: Vec<i32>,
 	score: i32,
-	mode: Gamemode
+	mode: Gamemode,
 }
 
 impl Run {
@@ -822,7 +823,7 @@ impl Run {
 		Run {
 			splits: vec![0; mode.splits()],
 			score: 0,
-			mode
+			mode,
 		}
 	}
 }
@@ -839,7 +840,7 @@ impl OldRun {
 		Run {
 			splits: self.splits.to_vec(),
 			score: self.score,
-			mode: Gamemode::GreenOrange
+			mode: Gamemode::GreenOrange,
 		}
 	}
 }
@@ -875,7 +876,7 @@ impl Category {
 
 	fn update_from_run(&mut self, run: &Run) {
 		if run.mode != self.mode {
-			return
+			return;
 		}
 
 		if run.score > self.personal_best.score {
