@@ -22,3 +22,6 @@ features = [
 	"Win32_System_Memory",
 	"Win32_Security"
 ]
+
+[build-dependencies]
+winresource = "0.1.27"
