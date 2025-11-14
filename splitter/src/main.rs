@@ -354,9 +354,11 @@ impl App for ZeroSplitter {
 				let cur_category = &self.categories[self.current_category];
 
 				for (i, split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
+					// Switch current split score between modes
 					if self.relative_score {
 						(i, s)
 					} else {
+						// Get total score up to the current split
 						(i, self.current_run
 							.splits
 							.iter()
@@ -365,8 +367,11 @@ impl App for ZeroSplitter {
 							.fold(0, |acc, (_, &s)| acc + s))
 					}
 				}) {
+					// translate split number to stage/loop for GO
 					let stage_n = (i & 3) + 1;
 					let loop_n = (i >> 2) + 1;
+					// Get relative/absolute gold split
+					// Gold split = high score of this split in any run
 					let gold_split = if self.relative_score {
 						cur_category.best_splits[i]
 					} else {
@@ -377,6 +382,8 @@ impl App for ZeroSplitter {
 							.take_while(|&(idx, _)| idx <= i)
 							.fold(0, |acc, (_, &s)| acc + s)
 					};
+					// Get relative/absolute split in the PB
+					// PB split = score of this split in the PB run
 					let pb_split = if self.relative_score {
 						self.comparison.personal_best.splits[i]
 					} else {
@@ -401,7 +408,9 @@ impl App for ZeroSplitter {
 							}
 						},
 						|right| {
+							// Only write splits up to the current split
 							if i <= self.current_split.unwrap_or(0) {
+								// Set color of split (rightmost number)
 								let split_color = if self.current_split == Some(i) {
 									Color32::WHITE
 								} else if split >= gold_split{
@@ -410,17 +419,7 @@ impl App for ZeroSplitter {
 									DARK_ORANGE
 								};
 
-								if self.relative_score {
-									right.colored_label(split_color, split.to_string());
-								} else {
-									let split_absolute = self.current_run
-										.splits
-										.iter()
-										.enumerate()
-										.take_while(|&(idx, _)| idx <= i)
-										.fold(0, |acc, (_, &s)| acc + s);
-									right.colored_label(split_color, split_absolute.to_string());
-								}
+								right.colored_label(split_color, split.to_string());
 
 								if i < self.current_split.unwrap_or(0) {
 									// past split, we should show a diff
@@ -432,12 +431,7 @@ impl App for ZeroSplitter {
 									} else {
 										DARK_GREEN
 									};
-
-									if diff > 0 {
-										right.colored_label(diff_color, format!("+{}", diff));
-									} else {
-										right.colored_label(diff_color, diff.to_string());
-									}
+									right.colored_label(diff_color, format!("{diff:+}"));
 								}
 							} else {
 								right.colored_label(DARK_GREEN, "--");
