@@ -252,12 +252,10 @@ impl ZeroSplitter {
 
 		// Reset if we returned to 1-1
 		if frame.total_score() == 0 && self.last_frame.total_score() > 0 || self.last_frame.is_menu() {
-			// Only support starting at stage 1 for now
-			if frame.is_first_stage() {
-				self.reset();
-				self.current_split = Some(0);
-				return
-			} // TODO: detect start of each other stage and start splits there properly
+			self.reset();
+			self.current_split = Some(0);
+			return
+			// TODO: detect start of each other stage and start splits there properly
 		}
 
 		if !frame.is_menu() && self.active {
