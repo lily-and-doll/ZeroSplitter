@@ -245,17 +245,23 @@ impl ZeroSplitter {
 	}
 
 	fn update_whitevanilla(&mut self, frame: FrameData) {
-		// Skip update if current category isn't White Vanilla
-		if self.categories[self.current_category].mode != Gamemode::WhiteVanilla {
+		// Skip update if current category isn't White Vanilla or if on menu
+		if self.categories[self.current_category].mode != Gamemode::WhiteVanilla || frame.is_menu() {
 			return;
 		}
 
 		// Reset if we returned to 1-1
 		if frame.total_score() == 0 && self.last_frame.total_score() > 0 || self.last_frame.is_menu() {
 			self.reset();
-			self.current_split = Some(0);
+			self.current_split = match frame.stage {
+				1 => Some(0),
+				2 => Some(5),
+				3 => Some(12),
+				4 => Some(19),
+				_ => panic!("Stage out of bounds! {}", frame.stage)
+			};
 			return
-			// TODO: detect start of each other stage and start splits there properly
+
 		}
 
 		if !frame.is_menu() && self.active {
