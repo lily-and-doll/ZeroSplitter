@@ -14,8 +14,7 @@ use common::FrameData;
 use eframe::{
 	App, Frame, NativeOptions,
 	egui::{
-		Align, CentralPanel, Color32, ComboBox, Context, IconData, Id, Key, Layout, Sides, ThemePreference,
-		TopBottomPanel, ViewportBuilder, ViewportId,
+		Align, Button, CentralPanel, Color32, ComboBox, Context, IconData, Id, Key, Layout, Sides, ThemePreference, TopBottomPanel, ViewportBuilder, ViewportId
 	},
 };
 use log::{error, warn};
@@ -320,9 +319,13 @@ impl App for ZeroSplitter {
 		}
 
 		CentralPanel::default().show(ctx, |ui| {
+			ui.visuals_mut().selection.bg_fill = DARK_ORANGE;
+			ui.visuals_mut().selection.stroke.color = GREENEST;
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
-					ui.checkbox(&mut self.relative_score, "").on_hover_text("Use relative (per-split) scores");
+					ui.toggle_value(&mut self.relative_score, "RELATIVE")
+				});
+				ui.horizontal(|ui| {
 					ui.label("Category: ");
 					ComboBox::from_label("").show_index(ui, &mut self.current_category, self.categories.len(), |i| {
 						&self.categories[i].name
