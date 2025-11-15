@@ -14,7 +14,8 @@ use common::FrameData;
 use eframe::{
 	App, Frame, NativeOptions,
 	egui::{
-		Align, Button, CentralPanel, Color32, ComboBox, Context, IconData, Id, Key, Layout, Sides, ThemePreference, TopBottomPanel, ViewportBuilder, ViewportId
+		Align, CentralPanel, Color32, ComboBox, Context, IconData, Id, Key, Layout, Sides, ThemePreference,
+		TopBottomPanel, ViewportBuilder, ViewportId,
 	},
 };
 use log::{error, warn};
@@ -106,6 +107,7 @@ struct ZeroSplitter {
 	comparison: Category,
 	active: bool,
 	relative_score: bool,
+	show_gold_split: bool,
 }
 
 impl ZeroSplitter {
@@ -132,6 +134,7 @@ impl ZeroSplitter {
 			comparison: Category::new("<null>".to_string(), Gamemode::GreenOrange),
 			active: false,
 			relative_score: true,
+			show_gold_split: true,
 		}
 	}
 
@@ -324,6 +327,9 @@ impl App for ZeroSplitter {
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
 					ui.toggle_value(&mut self.relative_score, "RELATIVE")
+						.on_hover_text("Display relative score per split or running total of score");
+					ui.toggle_value(&mut self.show_gold_split, "BEST SPLITS")
+						.on_hover_text("Show your PB's splits or your best splits on the left");
 				});
 				ui.horizontal(|ui| {
 					ui.label("Category: ");
@@ -359,12 +365,15 @@ impl App for ZeroSplitter {
 						(i, s)
 					} else {
 						// Get total score up to the current split
-						(i, self.current_run
-							.splits
-							.iter()
-							.enumerate()
-							.take_while(|&(idx, _)| idx <= i)
-							.fold(0, |acc, (_, &s)| acc + s))
+						(
+							i,
+							self.current_run
+								.splits
+								.iter()
+								.enumerate()
+								.take_while(|&(idx, _)| idx <= i)
+								.fold(0, |acc, (_, &s)| acc + s),
+						)
 					}
 				}) {
 					// translate split number to stage/loop for GO
@@ -387,7 +396,9 @@ impl App for ZeroSplitter {
 					let pb_split = if self.relative_score {
 						self.comparison.personal_best.splits[i]
 					} else {
-						self.comparison.personal_best.splits
+						self.comparison
+							.personal_best
+							.splits
 							.iter()
 							.enumerate()
 							.take_while(|&(idx, _)| idx <= i)
@@ -403,8 +414,14 @@ impl App for ZeroSplitter {
 								Gamemode::BlackOnion => todo!(),
 							};
 
-							if gold_split > 0 {
-								left.colored_label(GREEN, gold_split.to_string());
+							if self.show_gold_split {
+								if gold_split > 0 {
+									left.colored_label(GREEN, gold_split.to_string());
+								}
+							} else {
+								if pb_split > 0 {
+									left.colored_label(GREEN, pb_split.to_string());
+								}
 							}
 						},
 						|right| {
@@ -413,7 +430,7 @@ impl App for ZeroSplitter {
 								// Set color of split (rightmost number)
 								let split_color = if self.current_split == Some(i) {
 									Color32::WHITE
-								} else if split >= gold_split{
+								} else if split >= gold_split {
 									DARKER_ORANGE
 								} else {
 									DARK_ORANGE
