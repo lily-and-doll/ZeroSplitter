@@ -42,6 +42,8 @@ const DARKER_GREEN: Color32 = Color32::from_rgb(0x00, 0x32, 0x32);
 #[allow(unused)]
 const GREENEST: Color32 = Color32::from_rgb(0x00, 0x1d, 0x23);
 
+const SPLIT_DELAY_FRAMES: u32 = 20;
+
 static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
 fn main() {
@@ -108,6 +110,7 @@ struct ZeroSplitter {
 	active: bool,
 	relative_score: bool,
 	show_gold_split: bool,
+	split_delay: Option<u32>
 }
 
 impl ZeroSplitter {
@@ -135,6 +138,7 @@ impl ZeroSplitter {
 			active: false,
 			relative_score: true,
 			show_gold_split: true,
+			split_delay: None,
 		}
 	}
 
@@ -282,9 +286,18 @@ impl ZeroSplitter {
 		if !frame.is_menu() && self.active {
 			// Split if necessary; score requirement prevents spurious splits after a reset
 			if frame.timer_wave == 0 && self.last_frame.timer_wave != 0 && frame.total_score() > 0 {
-				self.current_split = self.current_split.or(Some(0)).map(|s| s + 1);
+				self.split_delay = Some(SPLIT_DELAY_FRAMES);
+			}
+
+			if let Some(split_delay) = self.split_delay {
+				if split_delay > 1 {
+					self.split_delay = Some(split_delay - 1)
+				} else {
+					self.current_split = self.current_split.or(Some(0)).map(|s| s + 1);
 				self.current_split_score_offset = self.last_frame.total_score();
 				self.save_splits();
+				self.split_delay = None
+				}
 			}
 
 			// TODO: reimplement continue support
