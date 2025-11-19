@@ -13,21 +13,18 @@ use std::{
 use common::FrameData;
 use eframe::{
 	NativeOptions,
-	egui::{
-		Context, IconData, ThemePreference,
-		ViewportBuilder,
-	},
+	egui::{Context, IconData, ThemePreference, ViewportBuilder},
 };
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::theme::zeroranger_visuals;
 
+mod app;
 mod hook;
 mod system;
-mod ui;
-mod app;
 mod theme;
+mod ui;
 
 const SPLIT_DELAY_FRAMES: u32 = 20;
 
@@ -100,7 +97,7 @@ struct ZeroSplitter {
 	relative_score: bool,
 	show_gold_split: bool,
 	split_delay: Option<u32>,
-	names: bool
+	names: bool,
 }
 
 impl ZeroSplitter {
@@ -129,7 +126,7 @@ impl ZeroSplitter {
 			relative_score: true,
 			show_gold_split: true,
 			split_delay: None,
-			names: false
+			names: false,
 		}
 	}
 
@@ -319,9 +316,6 @@ impl ZeroSplitter {
 	}
 }
 
-
-
-
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum Gamemode {
 	GreenOrange,
@@ -342,7 +336,6 @@ pub struct EntryDialogData {
 	pub textbox: String,
 	pub mode: Gamemode,
 }
-
 
 /// Translation of function of the same name in ZR.
 /// Checkpoints in WV have the same stage/checkpoint as in GO,

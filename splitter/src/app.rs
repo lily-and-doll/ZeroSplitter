@@ -4,7 +4,10 @@ use eframe::{
 };
 
 use crate::{
-	Category, Gamemode, ZeroSplitter, theme::{DARK_GREEN, DARK_ORANGE, DARKER_ORANGE, GREEN, GREENEST, LIGHT_ORANGE}, ui::{category_maker_dialog, confirm_dialog}, vanilla_descriptive_split_names, vanilla_split_names
+	Category, Gamemode, ZeroSplitter,
+	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, GREENEST, LIGHT_ORANGE},
+	ui::{category_maker_dialog, confirm_dialog},
+	vanilla_descriptive_split_names, vanilla_split_names,
 };
 
 impl App for ZeroSplitter {
@@ -39,7 +42,7 @@ impl App for ZeroSplitter {
 						.on_hover_text("Display relative score per split or running total of score");
 					ui.toggle_value(&mut self.show_gold_split, "BEST SPLITS")
 						.on_hover_text("Show your PB's splits or your best splits on the left");
-                    ui.toggle_value(&mut self.names, "NAMES")
+					ui.toggle_value(&mut self.names, "NAMES")
 						.on_hover_text("Toggle descriptive or number names for WV splits");
 				});
 				ui.horizontal(|ui| {
@@ -58,23 +61,19 @@ impl App for ZeroSplitter {
 					}
 				});
 
-				for (i, split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
-					// Switch current split score between modes
-					if self.relative_score {
-						(i, s)
-					} else {
-						// Get total score up to the current split
-						(
-							i,
-							self.current_run
-								.splits
-								.iter()
-								.enumerate()
-								.take_while(|&(idx, _)| idx <= i)
-								.fold(0, |acc, (_, &s)| acc + s),
-						)
-					}
+				// relative split: score gained during one split
+				// absolute split: total score during one split
+				for (i, rel_split, abs_split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
+					(i, s, {
+						self.current_run
+							.splits
+							.iter()
+							.enumerate()
+							.take_while(|&(idx, _)| idx <= i)
+							.fold(0, |acc, (_, &s)| acc + s)
+					})
 				}) {
+					let split = if self.relative_score { rel_split } else { abs_split };
 					// translate split number to stage/loop for GO
 					let stage_n = (i & 3) + 1;
 					let loop_n = (i >> 2) + 1;
@@ -92,16 +91,20 @@ impl App for ZeroSplitter {
 					};
 					// Get relative/absolute split in the PB
 					// PB split = score of this split in the PB run
+					let rel_pb_split = self.comparison.personal_best.splits[i];
+					let abs_pb_split = self
+						.comparison
+						.personal_best
+						.splits
+						.iter()
+						.enumerate()
+						.take_while(|&(idx, _)| idx <= i)
+						.fold(0, |acc, (_, &s)| acc + s);
+
 					let pb_split = if self.relative_score {
-						self.comparison.personal_best.splits[i]
+						rel_pb_split
 					} else {
-						self.comparison
-							.personal_best
-							.splits
-							.iter()
-							.enumerate()
-							.take_while(|&(idx, _)| idx <= i)
-							.fold(0, |acc, (_, &s)| acc + s)
+						abs_pb_split
 					};
 
 					Sides::new().show(
@@ -110,13 +113,12 @@ impl App for ZeroSplitter {
 							match cur_category.mode {
 								Gamemode::GreenOrange => left.label(format!("{}-{}", loop_n, stage_n)),
 								Gamemode::WhiteVanilla => {
-                                    if self.names {
-                                        left.label(vanilla_descriptive_split_names(i))
-                                    } else {
-                                        left.label(vanilla_split_names(i))
-                                    }
-                                    
-                                },
+									if self.names {
+										left.label(vanilla_descriptive_split_names(i))
+									} else {
+										left.label(vanilla_split_names(i))
+									}
+								}
 								Gamemode::BlackOnion => todo!(),
 							};
 
@@ -147,14 +149,26 @@ impl App for ZeroSplitter {
 								if i < self.current_split.unwrap_or(0) {
 									// past split, we should show a diff
 									let diff = split - pb_split;
-									let diff_color = if diff > 0 {
-										LIGHT_ORANGE
-									} else if diff == 0 {
-										Color32::WHITE
+									if self.relative_score {
+										let diff_color = if diff > 0 {
+											LIGHT_ORANGE
+										} else if diff == 0 {
+											Color32::WHITE
+										} else {
+											DARK_GREEN
+										};
+										right.colored_label(diff_color, format!("{diff:+}"));
 									} else {
-										DARK_GREEN
-									};
-									right.colored_label(diff_color, format!("{diff:+}"));
+										let rel_diff = rel_split - rel_pb_split;
+										let diff_color = if diff > 0 {
+											if rel_diff > 0 { LIGHT_ORANGE } else { DARKER_ORANGE }
+										} else if diff == 0 {
+											Color32::WHITE
+										} else {
+											if rel_diff > 0 { DARK_GREEN } else { DARKER_GREEN }
+										};
+										right.colored_label(diff_color, format!("{diff:+}"));
+									}
 								}
 							} else {
 								right.colored_label(DARK_GREEN, "--");
