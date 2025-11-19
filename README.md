@@ -4,8 +4,8 @@ Supports Green Orange and White Vanilla.
 
 [DOWNLOAD](https://github.com/lily-and-doll/ZeroSplitter/releases)
 
-<img width="302" height="677" alt="zerosplitter_hjuYG7gioU" src="https://github.com/user-attachments/assets/77ad0430-7060-4035-9c88-a3d741ab65a6" />
-<img width="302" height="677" alt="zerosplitter_1v8gZHNMn1" src="https://github.com/user-attachments/assets/268c1539-83bb-4c07-bc0a-31cf4515ac67" />
+<img width="302" height="682" alt="zerosplitter_BjsRefSLvF" src="https://github.com/user-attachments/assets/9ad379b2-5a8c-48bb-ae3f-423f39c98661" />
+<img width="302" height="682" alt="zerosplitter_vVeE4jqNXy" src="https://github.com/user-attachments/assets/b0e8cc7a-2ef4-4f2b-b42c-296c3f124acf" />
 
 
 # How to use
