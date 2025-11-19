@@ -54,6 +54,7 @@ fn main() {
 			.with_inner_size([300., 290.])
 			.with_icon(IconData::default())
 			.with_title("ZeroSplitter"),
+
 		..Default::default()
 	};
 
@@ -110,7 +111,7 @@ struct ZeroSplitter {
 	active: bool,
 	relative_score: bool,
 	show_gold_split: bool,
-	split_delay: Option<u32>
+	split_delay: Option<u32>,
 }
 
 impl ZeroSplitter {
@@ -294,9 +295,9 @@ impl ZeroSplitter {
 					self.split_delay = Some(split_delay - 1)
 				} else {
 					self.current_split = self.current_split.or(Some(0)).map(|s| s + 1);
-				self.current_split_score_offset = self.last_frame.total_score();
-				self.save_splits();
-				self.split_delay = None
+					self.current_split_score_offset = self.last_frame.total_score();
+					self.save_splits();
+					self.split_delay = None
 				}
 			}
 
@@ -306,7 +307,7 @@ impl ZeroSplitter {
 			self.current_run.score = frame.total_score();
 			let split_score = frame.total_score() - self.current_split_score_offset;
 			self.current_run.splits[self.current_split.unwrap_or(0)] = split_score;
-		} else if frame.is_menu(){
+		} else if frame.is_menu() {
 			// End the run if we're back on the menu
 			self.end_run();
 		}
@@ -334,6 +335,25 @@ impl App for ZeroSplitter {
 			self.update_frame(data);
 		}
 
+		// Detect gamemode change persist between frames
+		let prev_mode_id = Id::new("prev_mode");
+		let cur_mode = self.categories[self.current_category].mode;
+		if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id)) {
+			if prev_mode != cur_mode {
+				let min_size = match self.categories[self.current_category].mode {
+					Gamemode::GreenOrange => eframe::egui::Vec2 { x: 300.0, y: 300.0 },
+					Gamemode::WhiteVanilla => eframe::egui::Vec2 { x: 300.0, y: 650.0 },
+					Gamemode::BlackOnion => todo!(),
+				};
+				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));
+				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::InnerSize(min_size));
+				self.reset();
+			}
+		}
+		ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
+
+		let cur_category = &self.categories[self.current_category];
+
 		CentralPanel::default().show(ctx, |ui| {
 			ui.visuals_mut().selection.bg_fill = DARK_ORANGE;
 			ui.visuals_mut().selection.stroke.color = GREENEST;
@@ -359,18 +379,6 @@ impl App for ZeroSplitter {
 						self.waiting_for_rename = true;
 					}
 				});
-
-				// Detect gamemode change persist between frames
-				let prev_mode_id = Id::new("prev_mode");
-				let cur_mode = self.categories[self.current_category].mode;
-				if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id)) {
-					if prev_mode != cur_mode {
-						self.reset();
-					}
-				}
-				ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
-
-				let cur_category = &self.categories[self.current_category];
 
 				for (i, split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
 					// Switch current split score between modes
