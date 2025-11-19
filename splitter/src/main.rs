@@ -14,34 +14,20 @@ use common::FrameData;
 use eframe::{
 	NativeOptions,
 	egui::{
-		Color32, Context, IconData, ThemePreference,
+		Context, IconData, ThemePreference,
 		ViewportBuilder,
 	},
 };
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 
+use crate::theme::zeroranger_visuals;
+
 mod hook;
 mod system;
 mod ui;
 mod app;
-
-#[allow(unused)]
-const DARK_GREEN: Color32 = Color32::from_rgb(0, 0x4f, 0x4d);
-#[allow(unused)]
-const GREEN: Color32 = Color32::from_rgb(0, 0x94, 0x79);
-#[allow(unused)]
-const LIGHT_ORANGE: Color32 = Color32::from_rgb(0xff, 0xc0, 0x73);
-#[allow(unused)]
-const DARK_ORANGE: Color32 = Color32::from_rgb(0xff, 0x80, 0);
-#[allow(unused)]
-const DARKER_ORANGE: Color32 = Color32::from_rgb(0xdd, 0x59, 0x28);
-#[allow(unused)]
-const ORANGEST: Color32 = Color32::from_rgb(0xad, 0x2f, 0x17);
-#[allow(unused)]
-const DARKER_GREEN: Color32 = Color32::from_rgb(0x00, 0x32, 0x32);
-#[allow(unused)]
-const GREENEST: Color32 = Color32::from_rgb(0x00, 0x1d, 0x23);
+mod theme;
 
 const SPLIT_DELAY_FRAMES: u32 = 20;
 
@@ -69,6 +55,7 @@ fn main() {
 		Box::new(|c| {
 			let _ = EGUI_CTX.set(c.egui_ctx.clone());
 			c.egui_ctx.set_theme(ThemePreference::Dark);
+			c.egui_ctx.set_visuals(zeroranger_visuals());
 			Ok(Box::new(ZeroSplitter::load(rx)))
 		}),
 	)
@@ -113,6 +100,7 @@ struct ZeroSplitter {
 	relative_score: bool,
 	show_gold_split: bool,
 	split_delay: Option<u32>,
+	names: bool
 }
 
 impl ZeroSplitter {
@@ -141,6 +129,7 @@ impl ZeroSplitter {
 			relative_score: true,
 			show_gold_split: true,
 			split_delay: None,
+			names: false
 		}
 	}
 

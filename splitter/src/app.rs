@@ -1,12 +1,10 @@
 use eframe::{
 	App, Frame,
-	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides},
+	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides, Theme},
 };
 
 use crate::{
-	Category, DARK_GREEN, DARK_ORANGE, DARKER_ORANGE, GREEN, GREENEST, Gamemode, LIGHT_ORANGE, ZeroSplitter,
-	ui::{category_maker_dialog, confirm_dialog},
-	vanilla_split_names,
+	Category, Gamemode, ZeroSplitter, theme::{DARK_GREEN, DARK_ORANGE, DARKER_ORANGE, GREEN, GREENEST, LIGHT_ORANGE}, ui::{category_maker_dialog, confirm_dialog}, vanilla_descriptive_split_names, vanilla_split_names
 };
 
 impl App for ZeroSplitter {
@@ -35,14 +33,14 @@ impl App for ZeroSplitter {
 		let cur_category = &self.categories[self.current_category];
 
 		CentralPanel::default().show(ctx, |ui| {
-			ui.visuals_mut().selection.bg_fill = DARK_ORANGE;
-			ui.visuals_mut().selection.stroke.color = GREENEST;
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
 					ui.toggle_value(&mut self.relative_score, "RELATIVE")
 						.on_hover_text("Display relative score per split or running total of score");
 					ui.toggle_value(&mut self.show_gold_split, "BEST SPLITS")
 						.on_hover_text("Show your PB's splits or your best splits on the left");
+                    ui.toggle_value(&mut self.names, "NAMES")
+						.on_hover_text("Toggle descriptive or number names for WV splits");
 				});
 				ui.horizontal(|ui| {
 					ui.label("Category: ");
@@ -111,7 +109,14 @@ impl App for ZeroSplitter {
 						|left| {
 							match cur_category.mode {
 								Gamemode::GreenOrange => left.label(format!("{}-{}", loop_n, stage_n)),
-								Gamemode::WhiteVanilla => left.label(vanilla_split_names(i)),
+								Gamemode::WhiteVanilla => {
+                                    if self.names {
+                                        left.label(vanilla_descriptive_split_names(i))
+                                    } else {
+                                        left.label(vanilla_split_names(i))
+                                    }
+                                    
+                                },
 								Gamemode::BlackOnion => todo!(),
 							};
 
