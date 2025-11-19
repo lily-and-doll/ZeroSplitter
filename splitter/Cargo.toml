@@ -1,16 +1,20 @@
 [package]
 name = "zerosplitter"
-version = "0.1.4"
+version = "0.2.4"
 edition = "2024"
 
 [dependencies]
 bytemuck = "1"
 common = {path = "../common"}
-eframe = "0.31"
 pretty_env_logger = "0.5"
 log = "0.4"
 serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
+
+[dependencies.eframe]
+version = "0.31"
+default-features = false
+features = ["default_fonts", "glow"]
 
 [dependencies.windows]
 version = "0.60"
