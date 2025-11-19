@@ -1,11 +1,11 @@
 use eframe::{
 	App, Frame,
-	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides, Theme},
+	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides},
 };
 
 use crate::{
 	Category, Gamemode, ZeroSplitter,
-	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, GREENEST, LIGHT_ORANGE},
+	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, LIGHT_ORANGE},
 	ui::{category_maker_dialog, confirm_dialog},
 	vanilla_descriptive_split_names, vanilla_split_names,
 };
@@ -19,17 +19,17 @@ impl App for ZeroSplitter {
 		// Detect gamemode change persist between frames
 		let prev_mode_id = Id::new("prev_mode");
 		let cur_mode = self.categories[self.current_category].mode;
-		if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id)) {
-			if prev_mode != cur_mode {
-				let min_size = match self.categories[self.current_category].mode {
-					Gamemode::GreenOrange => eframe::egui::Vec2 { x: 300.0, y: 300.0 },
-					Gamemode::WhiteVanilla => eframe::egui::Vec2 { x: 300.0, y: 650.0 },
-					Gamemode::BlackOnion => todo!(),
-				};
-				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));
-				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::InnerSize(min_size));
-				self.reset();
-			}
+		if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id))
+			&& prev_mode != cur_mode
+		{
+			let min_size = match self.categories[self.current_category].mode {
+				Gamemode::GreenOrange => eframe::egui::Vec2 { x: 300.0, y: 300.0 },
+				Gamemode::WhiteVanilla => eframe::egui::Vec2 { x: 300.0, y: 650.0 },
+				Gamemode::BlackOnion => todo!(),
+			};
+			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));
+			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::InnerSize(min_size));
+			self.reset();
 		}
 		ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
 
@@ -111,7 +111,7 @@ impl App for ZeroSplitter {
 						ui,
 						|left| {
 							match cur_category.mode {
-								Gamemode::GreenOrange => left.label(format!("{}-{}", loop_n, stage_n)),
+								Gamemode::GreenOrange => left.label(format!("{loop_n}-{stage_n}")),
 								Gamemode::WhiteVanilla => {
 									if self.names {
 										left.label(vanilla_descriptive_split_names(i))
@@ -126,10 +126,8 @@ impl App for ZeroSplitter {
 								if gold_split > 0 {
 									left.colored_label(GREEN, gold_split.to_string());
 								}
-							} else {
-								if pb_split > 0 {
-									left.colored_label(GREEN, pb_split.to_string());
-								}
+							} else if pb_split > 0 {
+								left.colored_label(GREEN, pb_split.to_string());
 							}
 						},
 						|right| {
@@ -164,8 +162,10 @@ impl App for ZeroSplitter {
 											if rel_diff > 0 { LIGHT_ORANGE } else { DARKER_ORANGE }
 										} else if diff == 0 {
 											Color32::WHITE
+										} else if rel_diff > 0 {
+											DARK_GREEN
 										} else {
-											if rel_diff > 0 { DARK_GREEN } else { DARKER_GREEN }
+											DARKER_GREEN
 										};
 										right.colored_label(diff_color, format!("{diff:+}"));
 									}

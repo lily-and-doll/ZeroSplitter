@@ -103,15 +103,16 @@ struct ZeroSplitter {
 impl ZeroSplitter {
 	fn new(data_source: Receiver<FrameData>) -> Self {
 		let (tx, rx) = mpsc::channel();
-		let mut default_categories = Vec::new();
-		default_categories.push(Category::new("Type-C GO".to_string(), Gamemode::GreenOrange));
-		default_categories.push(Category::new("Type-B GO".to_string(), Gamemode::GreenOrange));
-		default_categories.push(Category::new("Type-C WV".to_string(), Gamemode::WhiteVanilla));
-		default_categories.push(Category::new("Type-B WV".to_string(), Gamemode::WhiteVanilla));
+		let default_categories = vec![
+			Category::new("Type-C GO".to_string(), Gamemode::GreenOrange),
+			Category::new("Type-B GO".to_string(), Gamemode::GreenOrange),
+			Category::new("Type-C WV".to_string(), Gamemode::WhiteVanilla),
+			Category::new("Type-B WV".to_string(), Gamemode::WhiteVanilla),
+		];
 		Self {
 			categories: default_categories,
 			data_source,
-			last_frame: Default::default(),
+			last_frame: FrameData::default(),
 			current_category: 0,
 			current_run: Run::new(Gamemode::GreenOrange),
 			current_split: None,
@@ -139,7 +140,7 @@ impl ZeroSplitter {
 			Ok(true) => (),
 			Ok(false) => return Self::new(data_source),
 			Err(e) => {
-				warn!("Could not tell if data file exists: {}", e);
+				warn!("Could not tell if data file exists: {e}");
 				return Self::new(data_source);
 			}
 		}
@@ -195,7 +196,7 @@ impl ZeroSplitter {
 		};
 
 		if let Err(err) = serde_json::to_writer_pretty(file, &self.categories) {
-			error!("Error writing save: {}", err);
+			error!("Error writing save: {err}");
 		}
 	}
 

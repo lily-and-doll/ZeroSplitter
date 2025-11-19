@@ -15,13 +15,13 @@ pub fn entry_dialog(ctx: &Context, tx: Sender<String>, msg: &'static str) {
 
 	ctx.show_viewport_deferred(ViewportId::from_hash_of("entry dialog"), vp_builder, move |ctx, _| {
 		if ctx.input(|input| input.viewport().close_requested()) {
-			let _ = tx.send("".to_string());
+			let _ = tx.send(String::new());
 			request_repaint();
 			return;
 		}
 
 		let text_id = Id::new("edit text");
-		let mut edit_str = ctx.data_mut(|data| data.get_temp_mut_or_insert_with(text_id, || String::new()).clone());
+		let mut edit_str = ctx.data_mut(|data| data.get_temp_mut_or_insert_with(text_id, String::new).clone());
 
 		CentralPanel::default().show(ctx, |ui| {
 			ui.vertical_centered_justified(|ui| {
@@ -58,7 +58,7 @@ pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>,
 
 		let text_id = Id::new("edit text");
 		let mode_id = Id::new("gamemode");
-		let mut edit_str = ctx.data_mut(|data| data.get_temp_mut_or_insert_with(text_id, || String::new()).clone());
+		let mut edit_str = ctx.data_mut(|data| data.get_temp_mut_or_insert_with(text_id, String::new).clone());
 		let mut mode = ctx.data_mut(|data| *data.get_temp_mut_or(mode_id, Gamemode::GreenOrange));
 
 		CentralPanel::default().show(ctx, |ui| {
@@ -68,7 +68,7 @@ pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>,
 				if ui.button("Confirm").clicked() {
 					let _ = tx.send(Some(EntryDialogData {
 						textbox: edit_str.clone(),
-						mode: mode,
+						mode,
 					}));
 					request_repaint();
 					ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Close);
@@ -80,7 +80,7 @@ pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>,
 			TopBottomPanel::bottom("mode_select").show(ctx, |ui| {
 				ui.vertical_centered_justified(|ui| {
 					ComboBox::from_label("Mode")
-						.selected_text(format!("{:?}", mode))
+						.selected_text(format!("{mode:?}"))
 						.show_ui(ui, |ui| {
 							ui.selectable_value(&mut mode, Gamemode::GreenOrange, "Green Orange");
 							ui.selectable_value(&mut mode, Gamemode::WhiteVanilla, "White Vanilla");
