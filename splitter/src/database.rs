@@ -21,73 +21,81 @@ impl Database {
 			conn: Arc::new(Connection::open("./sqlite.db3")?),
 		};
 
-		let schema_version = database
-			.conn
-			.query_one("PRAGMA user_version", (), |row| row.get::<_, i32>(0))
-			.unwrap();
-
-		if schema_version < CURRENT_SCHEMA_VERSION {
-			database.migrate(schema_version)
-		} else if schema_version > CURRENT_SCHEMA_VERSION {
-			panic!(
-				"Schema version beyond program version!\n Schema version {schema_version}, program version {CURRENT_SCHEMA_VERSION}"
-			)
-		}
-		// #[cfg(debug_assertions)]
-		// {
-		// 	database.conn.execute("DROP TABLE IF EXISTS splits", ()).unwrap();
-		// 	database.conn.execute("DROP TABLE IF EXISTS runs", ()).unwrap();
-		// 	database.conn.execute("DROP TABLE IF EXISTS categories", ()).unwrap();
-		// }
 		if !database.conn.table_exists(Some("main"), "categories")? {
 			if let Err(err) = database.create_tables() {
 				error!("Error creating tables: {}", err)
 			};
 			database.insert_new_category("default".to_owned(), Gamemode::GreenOrange)?;
+		} else {
+			let schema_version = database
+				.conn
+				.query_one("PRAGMA user_version", (), |row| row.get::<_, i32>(0))
+				.unwrap();
+
+			if schema_version < CURRENT_SCHEMA_VERSION {
+				database.migrate(schema_version)
+			} else if schema_version > CURRENT_SCHEMA_VERSION {
+				panic!(
+					"Schema version beyond program version!\n Schema version {schema_version}, program version {CURRENT_SCHEMA_VERSION}"
+				)
+			}
 		}
 
 		Ok(database)
 	}
 	pub fn create_tables(&self) -> Result<()> {
-		self.conn
-			.pragma_update(Some("main"), "user_version", CURRENT_SCHEMA_VERSION)?;
-		self.conn.execute(
-			"
+		self.conn.execute("BEGIN TRANSACTION", ())?;
+
+		match (|| {
+			self.conn
+				.pragma_update(Some("main"), "user_version", CURRENT_SCHEMA_VERSION)?;
+			self.conn.execute(
+				"
     CREATE TABLE IF NOT EXISTS categories (
         id          INTEGER PRIMARY KEY,
         name        TEXT UNIQUE NOT NULL,
         mode        INTEGER NOT NULL
     )
     ",
-			(),
-		)?;
+				(),
+			)?;
 
-		self.conn.execute(
-			"
+			self.conn.execute(
+				"
     CREATE TABLE IF NOT EXISTS runs (
         id          INTEGER PRIMARY KEY,
         category    INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE
     ) 
     ",
-			(),
-		)?;
+				(),
+			)?;
 
-		self.conn.execute(
-			"
+			self.conn.execute(
+				"
     CREATE TABLE IF NOT EXISTS splits (
         id          INTEGER PRIMARY KEY,
         split_num   INTEGER NOT NULL,
         score       INTEGER NOT NULL,
         hits        INTEGER,
         mult        INTEGER,
-        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE
+        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
 		final		BOOLEAN
     )
     ",
-			(),
-		)?;
+				(),
+			)?;
 
-		Ok(())
+			Ok::<(), rusqlite::Error>(())
+		})() {
+			Ok(_) => {
+				self.conn.execute("COMMIT", ())?;
+				Ok(())
+			}
+			Err(err) => {
+				self.conn.execute("ROLLBACK", ())?;
+				Err(err)
+			}
+		}
 	}
 
 	pub fn insert_current_category(&self, category: &CategoryManager) -> Result<usize> {
