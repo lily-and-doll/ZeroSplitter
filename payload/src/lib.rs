@@ -103,6 +103,7 @@ fn get_frame_data() -> FrameData {
 	let realm = read_var(c"realm").unwrap().value as u8;
 	let checkpoint_sub = read_var(c"checkpoint_sub").unwrap().value as u8;
 	let timer_wave = read_var(c"timer_wave").unwrap().value as u32;
+	let multiplier_one = read_var(c"multiplier_one").unwrap().value as u32;
 	FrameData {
 		score_p1: score_p1 as i32,
 		score_p2: score_p2 as i32,
@@ -113,6 +114,7 @@ fn get_frame_data() -> FrameData {
 		realm,
 		checkpoint_sub,
 		timer_wave,
+		multiplier_one,
 	}
 }
 

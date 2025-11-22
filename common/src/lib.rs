@@ -14,6 +14,7 @@ pub struct FrameData {
 	pub realm: u8,
 	pub checkpoint_sub: u8,
 	pub timer_wave: u32,
+	pub multiplier_one: u32,
 }
 
 impl FrameData {
