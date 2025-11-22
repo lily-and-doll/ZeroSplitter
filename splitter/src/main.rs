@@ -135,7 +135,7 @@ impl ZeroSplitter {
 	}
 
 	fn save_splits(&mut self) {
-		if self.run.is_active() {
+		if self.run.is_active() && self.run.splits().unwrap().iter().sum::<i32>() > 0 {
 			debug!("Saving splits");
 
 			if let Err(err) = self.db.insert_run(&self.categories, &self.run) {

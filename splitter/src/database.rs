@@ -13,6 +13,8 @@ pub struct Database {
 	conn: Arc<Connection>,
 }
 
+const CURRENT_SCHEMA_VERSION: i32 = 1;
+
 impl Database {
 	pub fn init() -> Result<Self> {
 		let database = Database {
@@ -23,6 +25,14 @@ impl Database {
 			.conn
 			.query_one("PRAGMA user_version", (), |row| row.get::<_, i32>(0))
 			.unwrap();
+
+		if schema_version < CURRENT_SCHEMA_VERSION {
+			database.migrate(schema_version)
+		} else if schema_version > CURRENT_SCHEMA_VERSION {
+			panic!(
+				"Schema version beyond program version!\n Schema version {schema_version}, program version {CURRENT_SCHEMA_VERSION}"
+			)
+		}
 		// #[cfg(debug_assertions)]
 		// {
 		// 	database.conn.execute("DROP TABLE IF EXISTS splits", ()).unwrap();
@@ -38,8 +48,9 @@ impl Database {
 
 		Ok(database)
 	}
-	#[must_use]
 	pub fn create_tables(&self) -> Result<()> {
+		self.conn
+			.pragma_update(Some("main"), "user_version", CURRENT_SCHEMA_VERSION)?;
 		self.conn.execute(
 			"
     CREATE TABLE IF NOT EXISTS categories (
@@ -68,8 +79,9 @@ impl Database {
         split_num   INTEGER NOT NULL,
         score       INTEGER NOT NULL,
         hits        INTEGER,
-        mult        REAL,
+        mult        INTEGER,
         run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE
+		final		BOOLEAN
     )
     ",
 			(),
@@ -78,7 +90,6 @@ impl Database {
 		Ok(())
 	}
 
-	#[must_use]
 	pub fn insert_current_category(&self, category: &CategoryManager) -> Result<usize> {
 		let category = category.current();
 		self.conn.execute(
@@ -86,26 +97,25 @@ impl Database {
 			params![category.name, category.mode],
 		)
 	}
-	#[must_use]
+
 	pub fn insert_new_category(&self, name: String, mode: Gamemode) -> Result<i64> {
 		self.conn
 			.execute("INSERT INTO categories VALUES(NULL, ?1, ?2)", params![name, mode])?;
 
 		Ok(self.conn.last_insert_rowid())
 	}
-	#[must_use]
+
 	pub fn delete_category(&self, category: Category) -> Result<usize> {
 		self.conn
 			.execute("DELETE FROM categories WHERE id = ?1", params![category.id])
 	}
-	#[must_use]
+
 	pub fn rename_category(&self, category: &Category, new_name: String) -> Result<usize> {
 		self.conn.execute(
 			"UPDATE categories SET name='?1' WHERE id=?2",
 			params![new_name, category.id],
 		)
 	}
-	#[must_use]
 	pub fn get_categories(&self) -> Result<Vec<Category>> {
 		let mut statement = self.conn.prepare("SELECT name, mode, id FROM categories")?;
 		let rows = statement.query_map((), |row| {
@@ -121,7 +131,7 @@ impl Database {
 			.collect::<Vec<Category>>();
 		Ok(categories)
 	}
-	#[must_use]
+
 	pub fn insert_run(&self, category: &CategoryManager, run: &Run) -> Result<()> {
 		let category = category.current();
 		self.conn.execute("BEGIN TRANSACTION", ())?;
@@ -135,10 +145,11 @@ impl Database {
 			let run_id = self.conn.last_insert_rowid();
 
 			for (num, &split) in run.splits().unwrap().iter().enumerate() {
+				let final_split = num == run.current_split().unwrap();
 				let mult = run.mults().unwrap()[num];
 				self.conn.execute(
-					"INSERT INTO splits (id, split_num, score, hits, mult, run_id) VALUES(NULL, ?1, ?2, ?3, ?4, ?5)",
-					params![num, split, 0, mult, run_id],
+					"INSERT INTO splits (id, split_num, score, hits, mult, run_id, final) VALUES(NULL, ?1, ?2, ?3, ?4, ?5, ?6)",
+					params![num, split, 0, mult, run_id, final_split],
 				)?;
 			}
 
@@ -154,7 +165,7 @@ impl Database {
 			}
 		}
 	}
-	#[must_use]
+
 	pub fn get_pb_run(&self, category: &CategoryManager) -> Result<(Vec<i32>, i32, Gamemode)> {
 		let category = category.current();
 		let mut statement = self.conn.prepare(include_str!("../sql/pb_splits.sql"))?;
@@ -183,7 +194,6 @@ impl Database {
 	}
 
 	/// Get the highest core of each split for the category
-	#[must_use]
 	pub fn get_gold_splits(&self, category: &CategoryManager) -> Result<Vec<i32>> {
 		let mut statement = self.conn.prepare(include_str!("../sql/best_splits.sql"))?;
 		statement
@@ -196,6 +206,42 @@ impl Database {
 					Err(rusqlite::Error::QueryReturnedNoRows)
 				}
 			})?
+	}
+
+	fn migrate(&self, schema_version: i32) {
+		println!("Migrating database from {schema_version} to {CURRENT_SCHEMA_VERSION}");
+
+		self.conn.execute("BEGIN TRANSACTION", ()).unwrap();
+
+		let mut current_schema = schema_version;
+
+		match (|| {
+			while current_schema < CURRENT_SCHEMA_VERSION {
+				match current_schema {
+					0 => {
+						self.migrate0to1()?;
+						current_schema += 1
+					}
+					_ => Err(rusqlite::Error::InvalidQuery)?,
+				};
+			}
+			Ok::<(), rusqlite::Error>(())
+		})() {
+			Ok(_) => {
+				self.conn.execute("COMMIT", ()).unwrap();
+				println!("Migration successful")
+			}
+			Err(err) => {
+				self.conn.execute("ROLLBACK", ()).unwrap();
+				panic!("Migration failed! {err}")
+			}
+		}
+	}
+
+	fn migrate0to1(&self) -> Result<usize> {
+		println!("Migrating schema 0 to 1...");
+		self.conn.pragma_update(Some("main"), "user_version", 1)?;
+		self.conn.execute("ALTER TABLE splits ADD COLUMN final BOOLEAN", ())
 	}
 }
 
