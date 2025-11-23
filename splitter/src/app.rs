@@ -58,7 +58,10 @@ impl App for ZeroSplitter {
 						let mut cat_idx = self.categories.current;
 						ComboBox::from_label("")
 							.show_index(ui, &mut cat_idx, len, |i| &self.categories.index(i).unwrap().name);
-						self.categories.set_current(cat_idx, &self.db).unwrap();
+						if self.categories.current != cat_idx {
+							self.end_run();
+							self.categories.set_current(cat_idx, &self.db).unwrap();
+						}
 					}
 
 					if ui.small_button("+").clicked() {

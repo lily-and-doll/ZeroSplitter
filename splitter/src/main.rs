@@ -417,14 +417,18 @@ impl CategoryManager {
 			.map_err(ZeroError::DatabaseError)
 	}
 
-	pub fn set_current(&mut self, new_idx: usize, db: &Database) -> Result<(), ZeroError> {
-		if new_idx >= self.categories.len() {
+	/// Sets the current selected category by index.
+	/// Returns true if the category changed
+	pub fn set_current(&mut self, new_idx: usize, db: &Database) -> Result<bool, ZeroError> {
+		if new_idx == self.current {
+			return Ok(false);
+		} else if new_idx >= self.categories.len() {
 			return Err(ZeroError::CategoryOutOfRange);
 		}
 		self.current = new_idx;
 		self.refresh_comparison(db)?;
 
-		Ok(())
+		Ok(true)
 	}
 
 	pub fn get_comparison(&self) -> &Vec<i32> {
