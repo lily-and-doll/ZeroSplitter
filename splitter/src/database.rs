@@ -23,7 +23,7 @@ impl Database {
 
 		// create tables if they don't exist
 		if !database.conn.table_exists(Some("main"), "categories")? {
-			if let Err(err) = database.create_tables() {
+			if let Err(err) = database.create_tables0() {
 				error!("Error creating tables: {}", err)
 			};
 			database.insert_new_category("default".to_owned(), Gamemode::GreenOrange)?;
@@ -45,12 +45,11 @@ impl Database {
 
 		Ok(database)
 	}
-	pub fn create_tables(&self) -> Result<()> {
+	pub fn create_tables0(&self) -> Result<()> {
 		self.conn.execute("BEGIN TRANSACTION", ())?;
 
 		match (|| {
-			self.conn
-				.pragma_update(Some("main"), "user_version", CURRENT_SCHEMA_VERSION)?;
+			self.conn.pragma_update(Some("main"), "user_version", 0)?;
 			self.conn.execute(
 				"
     CREATE TABLE IF NOT EXISTS categories (

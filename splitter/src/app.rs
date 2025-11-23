@@ -159,7 +159,7 @@ impl ZeroSplitter {
 			// Gold split = high score of this split in any run
 			let best_splits = self.db.get_gold_splits(&self.categories);
 			let gold_split = match (best_splits, self.relative_score) {
-				(Ok(splits), true) => splits[i],
+				(Ok(splits), true) => *splits.get(i).unwrap_or(&0),
 				(Ok(splits), false) => splits
 					.iter()
 					.enumerate()
