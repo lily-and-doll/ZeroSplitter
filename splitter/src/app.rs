@@ -4,7 +4,7 @@ use eframe::{
 };
 
 use crate::{
-	Category, CategoryManager, Gamemode, Run, ZeroError, ZeroSplitter,
+	Gamemode, Run, ZeroError, ZeroSplitter,
 	config::CONFIG,
 	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, LIGHT_ORANGE},
 	ui::{category_maker_dialog, confirm_dialog},

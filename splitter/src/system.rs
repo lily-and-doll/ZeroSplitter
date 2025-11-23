@@ -49,7 +49,7 @@ impl ProcessHandle {
 	pub unsafe fn from_raw(raw: HANDLE) -> Self {
 		ProcessHandle { raw }
 	}
-
+	#[allow(dead_code)]
 	pub fn as_raw(&self) -> HANDLE {
 		self.raw
 	}
@@ -62,7 +62,7 @@ impl ProcessHandle {
 		};
 		OsString::from_wide(&buffer[0..size as usize]).into()
 	}
-
+	#[allow(dead_code)]
 	pub unsafe fn read_memory(&self, base_addr: *const c_void, buffer: &mut [u8]) -> Result<(), Error> {
 		unsafe { ReadProcessMemory(self.raw, base_addr, buffer.as_mut_ptr().cast(), buffer.len(), None) }
 	}
@@ -101,7 +101,7 @@ impl ProcessHandle {
 		};
 		res
 	}
-
+	#[allow(dead_code)]
 	pub fn enumerate_modules(&self) -> Vec<HMODULE> {
 		let mut needed = 0;
 		unsafe {
@@ -121,7 +121,7 @@ impl ProcessHandle {
 
 		modules
 	}
-
+	#[allow(dead_code)]
 	pub fn get_module_file_name_ex(&self, module: HMODULE) -> OsString {
 		let mut buffer = [0; 256];
 		let size = unsafe { GetModuleFileNameExW(Some(self.raw), Some(module), &mut buffer) };

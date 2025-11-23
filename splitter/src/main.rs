@@ -1,9 +1,8 @@
 use std::{
 	env,
-	fs::{self, File},
 	net::UdpSocket,
 	sync::{
-		LazyLock, OnceLock,
+		OnceLock,
 		mpsc::{self, Receiver, Sender},
 	},
 	thread,
@@ -15,9 +14,8 @@ use eframe::{
 	NativeOptions,
 	egui::{Context, IconData, ThemePreference, ViewportBuilder},
 };
-use log::{debug, error, warn};
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
-use toml::de::Error;
 
 use crate::{config::CONFIG, database::Database, run::Run, theme::zeroranger_visuals};
 
@@ -283,119 +281,6 @@ pub struct EntryDialogData {
 	pub mode: Gamemode,
 }
 
-/// Translation of function of the same name in ZR.
-/// Checkpoints in WV have the same stage/checkpoint as in GO,
-/// e.g. the cloudoo segment in stage 1 is technically stage 3 checkpoint 2
-/// just like it is in GO. Also, some segments have multiple checkpoints.
-/// This function gets the segment number in WV from the GO data.
-/// "Realm" seems to indicate when the ship is changed, like in TLB, the dream, or bonus stages
-///
-/// Someone much smarter than me could try to call this function directly from the
-/// game instead of using this.
-fn vanilla_get_simstage(stage: u8, checkpoint: u8, checkpoint_sub: u8, realm: u8) -> Result<(u32, u32), ()> {
-	Ok(match (stage, checkpoint) {
-		//  GO stage/check => WV stage/check
-		(1, _) if realm == 3 => (1, 4),
-		(1, 0 | 1) => (1, 0),
-		(1, 2) => (2, 4),
-		(1, 3) => (1, 2),
-		(1, 4 | 5 | 6) => (1, 3),
-
-		(2, _) if realm == 3 => (2, 6),
-		(2, 0 | 1) => (2, 0),
-		(2, 2) => (3, 1),
-		(2, 3) => (2, 1),
-		(2, 4) => (2, 3),
-		(2, 5) => (4, 1),
-		(2, 6 | 7 | 8) => (2, 5),
-
-		(3, 0) => (3, 0),
-		(3, 1) => (1, 1),
-		(3, 2) => (4, 4),
-		(3, 3) => (3, 2),
-		(3, 4) if checkpoint_sub < 1 => (2, 2),
-		(3, 4) => (3, 3),
-
-		(3, 6) => (4, 3),
-		(3, 7) => (3, 4),
-		(3, 8 | 9) => (3, 5),
-
-		(4, _) if realm == 3 => (3, 6),
-		(4, 3) => (3, 6),
-		(4, 5 | 6) => (4, 0),
-		(4, 7 | 8) => (4, 2),
-		(4, 9 | 10) => (4, 5),
-		_ => return Err(()),
-	})
-}
-
-/// Translate sim stage and checkpoint to split count
-/// e.g. snake is split 7 (0 indexed)
-fn vanilla_get_split_count(simstage: u32, simcheckpoint: u32) -> usize {
-	[
-		(1, 1),
-		(1, 2),
-		(1, 3),
-		(1, 4),
-		(1, 5),
-		(2, 1),
-		(2, 2),
-		(2, 3),
-		(2, 4),
-		(2, 5),
-		(2, 6),
-		(2, 7),
-		(3, 1),
-		(3, 2),
-		(3, 3),
-		(3, 4),
-		(3, 5),
-		(3, 6),
-		(3, 7),
-		(4, 1),
-		(4, 2),
-		(4, 3),
-		(4, 4),
-		(4, 5),
-		(4, 6),
-		(4, 7),
-	]
-	.iter()
-	.position(|&x| x == (simstage, simcheckpoint + 1))
-	.unwrap()
-}
-
-fn vanilla_stage_from_split(split: usize) -> (u32, u32) {
-	[
-		(1, 1),
-		(1, 2),
-		(1, 3),
-		(1, 4),
-		(1, 5),
-		(2, 1),
-		(2, 2),
-		(2, 3),
-		(2, 4),
-		(2, 5),
-		(2, 6),
-		(2, 7),
-		(3, 1),
-		(3, 2),
-		(3, 3),
-		(3, 4),
-		(3, 5),
-		(3, 6),
-		(3, 7),
-		(4, 1),
-		(4, 2),
-		(4, 3),
-		(4, 4),
-		(4, 5),
-		(4, 6),
-		(4, 7),
-	][split]
-}
-
 fn vanilla_split_names(split: usize) -> &'static str {
 	[
 		"1-1", "1-2", "1-3", "1-4", "Bonus 1", "2-1", "2-2", "2-3", "2-4", "2-5", "2-6", "Bonus 2", "3-1", "3-2",
@@ -551,7 +436,7 @@ impl CategoryManager {
 
 	pub fn refresh_comparison(&mut self, db: &Database) -> Result<(), ZeroError> {
 		self.comparison_cache = match db.get_pb_run(self) {
-			Ok((scores, total, mode)) if mode == self.current().mode => scores,
+			Ok((scores, _, mode)) if mode == self.current().mode => scores,
 			Ok(_) => return Err(ZeroError::DifficultyMismatch),
 			Err(rusqlite::Error::QueryReturnedNoRows) => vec![0; self.current().mode.splits()],
 			Err(e) => return Err(ZeroError::DatabaseError(e)),
@@ -569,6 +454,7 @@ struct Category {
 
 #[derive(Debug)]
 #[non_exhaustive]
+#[allow(dead_code)]
 enum ZeroError {
 	Illegal,
 	DatabaseError(rusqlite::Error),

@@ -1,4 +1,4 @@
-use std::{fmt::Error, sync::Arc};
+use std::sync::Arc;
 
 use log::error;
 use rusqlite::{
@@ -99,14 +99,6 @@ impl Database {
 		}
 	}
 
-	pub fn insert_current_category(&self, category: &CategoryManager) -> Result<usize> {
-		let category = category.current();
-		self.conn.execute(
-			"INSERT OR IGNORE INTO categories VALUES(NULL, ?1, ?2)",
-			params![category.name, category.mode],
-		)
-	}
-
 	pub fn insert_new_category(&self, name: String, mode: Gamemode) -> Result<i64> {
 		self.conn
 			.execute("INSERT INTO categories VALUES(NULL, ?1, ?2)", params![name, mode])?;
@@ -194,8 +186,8 @@ impl Database {
 
 		if splits.len() > 0 {
 			let scores: Vec<i32> = splits.iter().map(|s| s.0).collect();
-			let hits: Vec<i32> = splits.iter().map(|s| s.1).collect();
-			let run_id = splits[0].2;
+			let _hits: Vec<i32> = splits.iter().map(|s| s.1).collect();
+			let _run_id = splits[0].2;
 			let mode = splits[0].3;
 
 			let total = scores.iter().sum();
