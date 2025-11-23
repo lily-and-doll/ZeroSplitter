@@ -15,7 +15,9 @@ doesn't show up as the correct split, just go back to the main menu and launch f
 
 Continues should be tracked properly in Green Orange but not White Vanilla.
 
-Your data is stored in the `zs_data.json` next to the .exe.
+Co-op should work, but has not been tested. If you find co-op to work, let me know.
+
+Your data is stored in the `sqlite.db3` next to the .exe. You can manually insert, delete, or modify any data in the database if you like.
 
 A "category" is a set of splits and personal bests to run against. ZeroSplitter will try to detect which mode
 you are playing and not overwrite scores from one mode with another - but don't push your luck: have the right 
@@ -23,7 +25,7 @@ category selected before you take off.
 
 Press the plus button to add a new category - don't click Black Onion for the mode (it won't work at all). 
 
-Currently the only way to delete categories is by manually deleting them in the `zs_data.json`, but you can rename them.
+Currently the only way to delete categories is by manually dropping them from the database, but you can rename them.
 
 The "relative" button switches the display between showing your score per split or your running total up to each split.
 Turn on relative mode to see how much better or worse you did each split versus your PB run. Turn off relative mode
@@ -31,7 +33,7 @@ to see how far ahead or behind you are versus your PB run.
 
 The relative button only changes the display, not how the data is saved: toggle it as much as you like, even mid-run.
 
-If you want to move the program to another folder, just copy `zerosplitter.exe`, `payload.dll`, and `zs_data.json`.
+If you want to move the program to another folder, just copy all the files in the folder. 
 
 # How to build from source
 Just run `cargo run --release` in the top level of the repository, next to this `README.md`. `build.sh` will zip `zerosplitter.exe` 
