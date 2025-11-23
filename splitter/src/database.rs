@@ -80,7 +80,7 @@ impl Database {
         score       INTEGER NOT NULL,
         hits        INTEGER,
         mult        INTEGER,
-        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE
     )
     ",
 				(),
