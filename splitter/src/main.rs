@@ -164,23 +164,29 @@ impl ZeroSplitter {
 			return;
 		}
 
+		let frame_split = frame
+			.stage
+			.checked_sub(1)
+			.unwrap_or(0)
+			.checked_sub(frame.game_loop)
+			.unwrap_or(0) as usize;
+
 		// Reset if we just left the menu or returned to 1-1
 		if frame.stage != self.last_frame.stage && (self.last_frame.is_menu() || frame.is_first_stage()) {
 			self.reset();
 			self.run.start(frame);
+			self.run.set_split(frame_split).unwrap();
 			self.categories.refresh_comparison(&self.db).unwrap();
 		}
 
 		if !frame.is_menu() && self.run.is_active() {
-			let frame_split = (frame.stage - 1 - frame.game_loop) as usize;
-
 			if frame_split >= 8 {
 				// TLB or credits
 				return;
 			}
 
 			// Split if necessary
-			if (frame.stage != self.last_frame.stage) && !self.last_frame.is_menu() {
+			if (frame_split > self.run.current_split().unwrap()) && !self.last_frame.is_menu() {
 				self.run.split().unwrap();
 			}
 

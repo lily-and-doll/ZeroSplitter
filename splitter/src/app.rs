@@ -170,7 +170,7 @@ impl ZeroSplitter {
 			// Get relative/absolute split in the PB
 			// PB split = score of this split in the PB run
 			let compare = self.categories.get_comparison();
-			let rel_pb_split = compare[i];
+			let rel_pb_split = *compare.get(i).unwrap_or(&0);
 			let abs_pb_split = compare
 				.iter()
 				.enumerate()
