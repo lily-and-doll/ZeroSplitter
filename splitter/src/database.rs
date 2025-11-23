@@ -13,7 +13,7 @@ pub struct Database {
 	conn: Arc<Connection>,
 }
 
-const CURRENT_SCHEMA_VERSION: i32 = 1;
+const CURRENT_SCHEMA_VERSION: i32 = 2;
 
 impl Database {
 	pub fn init() -> Result<Self> {
@@ -21,24 +21,26 @@ impl Database {
 			conn: Arc::new(Connection::open("./sqlite.db3")?),
 		};
 
+		// create tables if they don't exist
 		if !database.conn.table_exists(Some("main"), "categories")? {
 			if let Err(err) = database.create_tables() {
 				error!("Error creating tables: {}", err)
 			};
 			database.insert_new_category("default".to_owned(), Gamemode::GreenOrange)?;
-		} else {
-			let schema_version = database
-				.conn
-				.query_one("PRAGMA user_version", (), |row| row.get::<_, i32>(0))
-				.unwrap();
+		}
+		// check version of schema (0 if they were just created)
+		let schema_version = database
+			.conn
+			.query_one("PRAGMA user_version", (), |row| row.get::<_, i32>(0))
+			.unwrap();
 
-			if schema_version < CURRENT_SCHEMA_VERSION {
-				database.migrate(schema_version)
-			} else if schema_version > CURRENT_SCHEMA_VERSION {
-				panic!(
-					"Schema version beyond program version!\n Schema version {schema_version}, program version {CURRENT_SCHEMA_VERSION}"
-				)
-			}
+		// migrate schema version if necessary
+		if schema_version < CURRENT_SCHEMA_VERSION {
+			database.migrate(schema_version)
+		} else if schema_version > CURRENT_SCHEMA_VERSION {
+			panic!(
+				"Schema version beyond program version!\n Schema version {schema_version}, program version {CURRENT_SCHEMA_VERSION}"
+			)
 		}
 
 		Ok(database)
@@ -79,7 +81,6 @@ impl Database {
         hits        INTEGER,
         mult        INTEGER,
         run_id      INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-		final		BOOLEAN
     )
     ",
 				(),
@@ -148,11 +149,14 @@ impl Database {
 			let mut stmt = self.conn.prepare("SELECT id FROM categories WHERE name = ?1")?;
 			let res = stmt.query_one(params![category.name], |row| row.get::<usize, usize>(0))?;
 
-			self.conn.execute("INSERT INTO runs VALUES(NULL, ?1)", params![res])?;
+			self.conn.execute(
+				"INSERT INTO runs (id, category, datetime) VALUES(NULL, ?1, datetime('now'))",
+				params![res],
+			)?;
 
 			let run_id = self.conn.last_insert_rowid();
 
-			for (num, &split) in run.splits().unwrap().iter().enumerate() {
+			for (num, &split) in run.splits().unwrap().iter().take_while(|&&s| s > 0).enumerate() {
 				let final_split = num == run.current_split().unwrap();
 				let mult = run.mults().unwrap()[num];
 				self.conn.execute(
@@ -165,6 +169,7 @@ impl Database {
 		})() {
 			Ok(_) => {
 				self.conn.execute("COMMIT", ())?;
+				println!("Committing run with score {} to database", run.score().unwrap());
 				Ok(())
 			}
 			Err(err) => {
@@ -228,7 +233,11 @@ impl Database {
 				match current_schema {
 					0 => {
 						self.migrate0to1()?;
-						current_schema += 1
+						current_schema = 1
+					}
+					1 => {
+						self.migrate1to2()?;
+						current_schema = 2
 					}
 					_ => Err(rusqlite::Error::InvalidQuery)?,
 				};
@@ -250,6 +259,12 @@ impl Database {
 		println!("Migrating schema 0 to 1...");
 		self.conn.pragma_update(Some("main"), "user_version", 1)?;
 		self.conn.execute("ALTER TABLE splits ADD COLUMN final BOOLEAN", ())
+	}
+
+	fn migrate1to2(&self) -> Result<usize> {
+		println!("Migrating schema 1 to 2...");
+		self.conn.pragma_update(Some("main"), "user_version", 2)?;
+		self.conn.execute("ALTER TABLE runs ADD COLUMN datetime INTEGER", ())
 	}
 }
 
