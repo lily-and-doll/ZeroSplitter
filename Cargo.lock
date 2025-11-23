@@ -2862,6 +2862,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "toml",
  "windows",
  "winresource",
 ]

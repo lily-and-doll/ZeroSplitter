@@ -1,3 +1,4 @@
 /target
 *.db3
 /.vscode
+config.toml

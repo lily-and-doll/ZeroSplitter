@@ -5,6 +5,7 @@ use eframe::{
 
 use crate::{
 	Category, CategoryManager, Gamemode, Run, ZeroError, ZeroSplitter,
+	config::CONFIG,
 	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, LIGHT_ORANGE},
 	ui::{category_maker_dialog, confirm_dialog},
 	vanilla_descriptive_split_names, vanilla_split_names,
@@ -22,9 +23,16 @@ impl App for ZeroSplitter {
 		if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id))
 			&& prev_mode != cur_mode
 		{
+			let zoom_level = CONFIG.get().unwrap().zoom_level;
 			let min_size = match self.categories.current().mode {
-				Gamemode::GreenOrange => eframe::egui::Vec2 { x: 300.0, y: 300.0 },
-				Gamemode::WhiteVanilla => eframe::egui::Vec2 { x: 300.0, y: 650.0 },
+				Gamemode::GreenOrange => eframe::egui::Vec2 {
+					x: 300.0 * zoom_level,
+					y: 300.0 * zoom_level,
+				},
+				Gamemode::WhiteVanilla => eframe::egui::Vec2 {
+					x: 300.0 * zoom_level,
+					y: 650.0 * zoom_level,
+				},
 				Gamemode::BlackOnion => todo!(),
 			};
 			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));

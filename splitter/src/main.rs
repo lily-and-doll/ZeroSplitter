@@ -17,10 +17,12 @@ use eframe::{
 };
 use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
+use toml::de::Error;
 
-use crate::{database::Database, run::Run, theme::zeroranger_visuals};
+use crate::{config::CONFIG, database::Database, run::Run, theme::zeroranger_visuals};
 
 mod app;
+mod config;
 mod database;
 mod hook;
 mod run;
@@ -33,6 +35,7 @@ const SPLIT_DELAY_FRAMES: u32 = 20;
 static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
 fn main() {
+	config::load_config().unwrap();
 	#[cfg(debug_assertions)]
 	unsafe {
 		env::set_var("RUST_BACKTRACE", "1");
@@ -42,7 +45,7 @@ fn main() {
 
 	let options = NativeOptions {
 		viewport: ViewportBuilder::default()
-			.with_inner_size([300., 290.])
+			.with_inner_size([300., 300.])
 			.with_icon(IconData::default())
 			.with_title("ZeroSplitter"),
 
@@ -60,6 +63,7 @@ fn main() {
 			let _ = EGUI_CTX.set(c.egui_ctx.clone());
 			c.egui_ctx.set_theme(ThemePreference::Dark);
 			c.egui_ctx.set_visuals(zeroranger_visuals());
+			c.egui_ctx.set_zoom_factor(CONFIG.get().unwrap().zoom_level);
 			Ok(Box::new(ZeroSplitter::load(rx)))
 		}),
 	)
@@ -572,4 +576,7 @@ enum ZeroError {
 	DifficultyMismatch,
 	SplitOutOfRange,
 	CategoryOutOfRange,
+	IOError(std::io::Error),
+	TOMLError(toml::de::Error),
+	StaticAlreadyInit,
 }
