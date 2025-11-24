@@ -17,7 +17,7 @@ use eframe::{
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::CONFIG, database::Database, run::Run, theme::zeroranger_visuals};
+use crate::{app::Toggles, config::CONFIG, database::Database, run::Run, theme::zeroranger_visuals};
 
 mod app;
 mod config;
@@ -98,11 +98,9 @@ struct ZeroSplitter {
 	waiting_for_confirm: bool,
 	dialog_rx: Receiver<Option<EntryDialogData>>,
 	dialog_tx: Sender<Option<EntryDialogData>>,
-	relative_score: bool,
-	show_gold_split: bool,
 	split_delay: Option<u32>,
-	names: bool,
 	db: Database,
+	toggles: Toggles,
 }
 
 impl ZeroSplitter {
@@ -118,11 +116,14 @@ impl ZeroSplitter {
 			waiting_for_category: false,
 			waiting_for_rename: false,
 			waiting_for_confirm: false,
-			relative_score: true,
-			show_gold_split: true,
 			split_delay: None,
-			names: false,
 			db,
+			toggles: Toggles {
+				names: false,
+				relative_score: true,
+				show_gold_split: true,
+				decorations: true,
+			},
 		};
 
 		zerosplitter.categories.load(&zerosplitter.db).unwrap();

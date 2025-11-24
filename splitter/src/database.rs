@@ -267,8 +267,7 @@ impl Database {
 		self.conn.pragma_update(Some("main"), "user_version", 3)?;
 		self.conn.execute_batch(
 			"ALTER TABLE splits ADD COLUMN pattern_rank REAL;
-			ALTER TABLE splits ADD COLUMN dynamic_rank REAL;"
-			
+			ALTER TABLE splits ADD COLUMN dynamic_rank REAL;",
 		)
 	}
 }

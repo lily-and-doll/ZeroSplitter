@@ -11,6 +11,13 @@ use crate::{
 	vanilla_descriptive_split_names, vanilla_split_names,
 };
 
+pub struct Toggles {
+	pub names: bool,
+	pub relative_score: bool,
+	pub show_gold_split: bool,
+	pub decorations: bool,
+}
+
 impl App for ZeroSplitter {
 	fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
 		while let Ok(data) = self.data_source.try_recv() {
@@ -44,12 +51,20 @@ impl App for ZeroSplitter {
 		CentralPanel::default().show(ctx, |ui| {
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
-					ui.toggle_value(&mut self.relative_score, "RELATIVE")
+					ui.toggle_value(&mut self.toggles.relative_score, "RELATIVE")
 						.on_hover_text("Display relative score per split or running total of score");
-					ui.toggle_value(&mut self.show_gold_split, "BEST SPLITS")
+					ui.toggle_value(&mut self.toggles.show_gold_split, "BEST SPLITS")
 						.on_hover_text("Show your PB's splits or your best splits on the left");
-					ui.toggle_value(&mut self.names, "NAMES")
+					ui.toggle_value(&mut self.toggles.names, "NAMES")
 						.on_hover_text("Toggle descriptive or number names for WV splits");
+					let deco_toggle = ui
+						.toggle_value(&mut self.toggles.decorations, "TITLE")
+						.on_hover_text("Toggle the titlebar of the program");
+					if deco_toggle.changed() && self.toggles.decorations {
+						ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(true));
+					} else if deco_toggle.changed() {
+						ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(false));
+					}
 				});
 				ui.horizontal(|ui| {
 					ui.label("Category: ");
@@ -154,11 +169,15 @@ impl ZeroSplitter {
 					.fold(0, |acc, (_, &s)| acc + s)
 			})
 		}) {
-			let split = if self.relative_score { rel_split } else { abs_split };
+			let split = if self.toggles.relative_score {
+				rel_split
+			} else {
+				abs_split
+			};
 			// Get relative/absolute gold split
 			// Gold split = high score of this split in any run
 			let best_splits = self.db.get_gold_splits(&self.categories);
-			let gold_split = match (best_splits, self.relative_score) {
+			let gold_split = match (best_splits, self.toggles.relative_score) {
 				(Ok(splits), true) => *splits.get(i).unwrap_or(&0),
 				(Ok(splits), false) => splits
 					.iter()
@@ -177,7 +196,7 @@ impl ZeroSplitter {
 				.take_while(|&(idx, _)| idx <= i)
 				.fold(0, |acc, (_, &s)| acc + s);
 
-			let pb_split = if self.relative_score {
+			let pb_split = if self.toggles.relative_score {
 				rel_pb_split
 			} else {
 				abs_pb_split
@@ -201,7 +220,7 @@ impl ZeroSplitter {
 					match self.categories.current().mode {
 						Gamemode::GreenOrange => left.label(format!("{loop_n}-{stage_n}")),
 						Gamemode::WhiteVanilla => {
-							if self.names {
+							if self.toggles.names {
 								left.label(vanilla_descriptive_split_names(n))
 							} else {
 								left.label(vanilla_split_names(n))
@@ -210,7 +229,7 @@ impl ZeroSplitter {
 						Gamemode::BlackOnion => todo!(),
 					};
 
-					if self.show_gold_split {
+					if self.toggles.show_gold_split {
 						if gold_score > 0 {
 							left.colored_label(GREEN, gold_score.to_string());
 						}
@@ -235,7 +254,7 @@ impl ZeroSplitter {
 						if n < current_split {
 							// past split, we should show a diff
 							let diff = current_score - compare_score;
-							if self.relative_score {
+							if self.toggles.relative_score {
 								let diff_color = if diff > 0 {
 									LIGHT_ORANGE
 								} else if diff == 0 {
