@@ -5,3 +5,13 @@
 # Scale factor for the entire UI. 2.0 = twice as large as normal.
 # The program is 300x300 in GO mode and 300x650 at 1.0 zoom, for reference
 zoom_level = 1.0
+
+
+# Adds a toggle in the top bar that turns off window decorations, e.g.
+# the title bar and side bars. When the decorations are hidden, you
+# can move the window by dragging it anywhere but cannot resize it
+# manually.
+# Known issue: right clicking the window when decorations are hidden
+# makes dragging no longer work. Turn them back on and drag the 
+# title bar to fix it.
+decoration_button = false

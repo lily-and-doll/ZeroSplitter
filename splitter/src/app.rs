@@ -1,6 +1,6 @@
 use eframe::{
 	App, Frame,
-	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides, Ui},
+	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sense, Sides, Ui},
 };
 
 use crate::{
@@ -49,6 +49,13 @@ impl App for ZeroSplitter {
 		ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
 
 		CentralPanel::default().show(ctx, |ui| {
+			if !self.toggles.decorations
+				&& ui
+					.interact(ui.max_rect(), Id::new("window_drag"), Sense::drag())
+					.dragged()
+			{
+				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::StartDrag);
+			}
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
 					ui.toggle_value(&mut self.toggles.relative_score, "RELATIVE")
@@ -57,13 +64,15 @@ impl App for ZeroSplitter {
 						.on_hover_text("Show your PB's splits or your best splits on the left");
 					ui.toggle_value(&mut self.toggles.names, "NAMES")
 						.on_hover_text("Toggle descriptive or number names for WV splits");
-					let deco_toggle = ui
-						.toggle_value(&mut self.toggles.decorations, "TITLE")
-						.on_hover_text("Toggle the titlebar of the program");
-					if deco_toggle.changed() && self.toggles.decorations {
-						ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(true));
-					} else if deco_toggle.changed() {
-						ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(false));
+					if CONFIG.get().unwrap().decoration_button {
+						let deco_toggle = ui
+							.toggle_value(&mut self.toggles.decorations, "DECOR")
+							.on_hover_text("Toggle the decoration (title bar...)");
+						if deco_toggle.changed() && self.toggles.decorations {
+							ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(true));
+						} else if deco_toggle.changed() {
+							ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(false));
+						}
 					}
 				});
 				ui.horizontal(|ui| {

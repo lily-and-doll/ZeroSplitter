@@ -27,6 +27,10 @@ pub fn load_config() -> Result<(), ZeroError> {
 			Some(Value::Float(f)) => *f as f32,
 			_ => 1.0,
 		},
+		decoration_button: match table.get("decoration_button") {
+			Some(Value::Boolean(b)) => *b,
+			_ => false,
+		},
 	};
 
 	CONFIG.set(config).map_err(|_| ZeroError::StaticAlreadyInit)?;
@@ -45,4 +49,5 @@ fn create_config() -> Result<String, ZeroError> {
 
 pub struct Config {
 	pub zoom_level: f32,
+	pub decoration_button: bool,
 }
