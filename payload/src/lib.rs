@@ -104,6 +104,8 @@ fn get_frame_data() -> FrameData {
 	let checkpoint_sub = read_var(c"checkpoint_sub").unwrap().value as u8;
 	let timer_wave = read_var(c"timer_wave").unwrap().value as u32;
 	let multiplier_one = read_var(c"multiplier_one").unwrap().value as u32;
+	let pattern_rank = read_var(c"pattern_rank").unwrap().value as f32;
+	let dynamic_rank = read_var(c"dynamic_rank").unwrap().value as f32;
 	FrameData {
 		score_p1: score_p1 as i32,
 		score_p2: score_p2 as i32,
@@ -115,6 +117,8 @@ fn get_frame_data() -> FrameData {
 		checkpoint_sub,
 		timer_wave,
 		multiplier_one,
+		pattern_rank,
+		dynamic_rank,
 	}
 }
 

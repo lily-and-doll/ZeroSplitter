@@ -13,7 +13,7 @@ pub struct Database {
 	conn: Arc<Connection>,
 }
 
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 impl Database {
 	pub fn init() -> Result<Self> {
@@ -151,8 +151,8 @@ impl Database {
 				let final_split = num == run.current_split().unwrap();
 				let mult = run.mults().unwrap()[num];
 				self.conn.execute(
-					"INSERT INTO splits (id, split_num, score, hits, mult, run_id, final) VALUES(NULL, ?1, ?2, ?3, ?4, ?5, ?6)",
-					params![num, split, 0, mult, run_id, final_split],
+					"INSERT INTO splits (id, split_num, score, hits, mult, run_id, final, pattern_rank, dynamic_rank) VALUES(NULL, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+					params![num, split, 0, mult, run_id, final_split, ],
 				)?;
 			}
 
@@ -230,6 +230,10 @@ impl Database {
 						self.migrate1to2()?;
 						current_schema = 2
 					}
+					2 => {
+						self.migrate2to3()?;
+						current_schema = 3
+					}
 					_ => Err(rusqlite::Error::InvalidQuery)?,
 				};
 			}
@@ -256,6 +260,16 @@ impl Database {
 		println!("Migrating schema 1 to 2...");
 		self.conn.pragma_update(Some("main"), "user_version", 2)?;
 		self.conn.execute("ALTER TABLE runs ADD COLUMN datetime INTEGER", ())
+	}
+
+	fn migrate2to3(&self) -> Result<()> {
+		println!("Migrating schema 2 to 3...");
+		self.conn.pragma_update(Some("main"), "user_version", 3)?;
+		self.conn.execute_batch(
+			"ALTER TABLE splits ADD COLUMN pattern_rank REAL;
+			ALTER TABLE splits ADD COLUMN dynamic_rank REAL;"
+			
+		)
 	}
 }
 

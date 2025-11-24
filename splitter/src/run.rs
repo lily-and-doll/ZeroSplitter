@@ -7,8 +7,7 @@ pub enum Run {
 	Inactive,
 	Active {
 		difficulty: Gamemode,
-		splits: Vec<i32>,
-		mults: Vec<u32>,
+		splits: Vec<SplitData>,
 		score: i32,
 		current_split: usize,
 		split_base_score: i32,
@@ -26,14 +25,14 @@ impl Run {
 	pub fn splits(&self) -> Result<Vec<i32>, ZeroError> {
 		match self {
 			Run::Inactive => Err(ZeroError::RunInactive),
-			Run::Active { splits, .. } => Ok(splits.to_vec()),
+			Run::Active { splits, .. } => Ok(splits.iter().map(|s| s.score).collect()),
 		}
 	}
 
 	pub fn mults(&self) -> Result<Vec<u32>, ZeroError> {
 		match self {
 			Run::Inactive => Err(ZeroError::RunInactive),
-			Run::Active { mults, .. } => Ok(mults.to_vec()),
+			Run::Active { splits, .. } => Ok(splits.iter().map(|s| s.mult).collect()),
 		}
 	}
 
@@ -41,8 +40,7 @@ impl Run {
 		let mode = frame.difficulty.into();
 		*self = Self::Active {
 			difficulty: mode,
-			splits: vec![0; mode.splits()],
-			mults: vec![0; mode.splits()],
+			splits: vec![Default::default(); mode.splits()],
 			score: 0,
 			current_split: 0,
 			split_base_score: 0,
@@ -58,8 +56,7 @@ impl Run {
 			Run::Inactive => Run::Inactive,
 			Run::Active { difficulty, .. } => Run::Active {
 				difficulty: difficulty,
-				splits: vec![0; difficulty.splits()],
-				mults: vec![0; difficulty.splits()],
+				splits: vec![Default::default(); difficulty.splits()],
 				score: 0,
 				current_split: 0,
 				split_base_score: 0,
@@ -74,7 +71,6 @@ impl Run {
 			score,
 			current_split,
 			split_base_score,
-			mults,
 		} = self
 		{
 			if *difficulty == Gamemode::from(frame.difficulty) {
@@ -82,8 +78,14 @@ impl Run {
 				if *split_base_score > *score {
 					*split_base_score = 0
 				}
-				splits[*current_split] = frame.total_score() - *split_base_score;
-				mults[*current_split] = frame.multiplier_one;
+				let data = SplitData::new(
+					frame.total_score(),
+					frame.multiplier_one,
+					frame.pattern_rank,
+					frame.dynamic_rank,
+				);
+				splits.insert(*current_split, data);
+
 				Ok(())
 			} else {
 				Err(ZeroError::DifficultyMismatch)
@@ -142,6 +144,36 @@ impl Run {
 		match self {
 			Run::Inactive => false,
 			Run::Active { .. } => true,
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SplitData {
+	score: i32,
+	mult: u32,
+	pattern_rank: f32,
+	dynamic_rank: f32,
+}
+
+impl SplitData {
+	fn new(score: i32, mult: u32, pattern_rank: f32, dynamic_rank: f32) -> Self {
+		Self {
+			score,
+			mult,
+			pattern_rank,
+			dynamic_rank,
+		}
+	}
+}
+
+impl Default for SplitData {
+	fn default() -> Self {
+		Self {
+			score: Default::default(),
+			mult: Default::default(),
+			pattern_rank: Default::default(),
+			dynamic_rank: Default::default(),
 		}
 	}
 }
