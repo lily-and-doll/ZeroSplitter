@@ -49,7 +49,7 @@ pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>,
 						.show_ui(ui, |ui| {
 							ui.selectable_value(&mut mode, Gamemode::GreenOrange, "Green Orange");
 							ui.selectable_value(&mut mode, Gamemode::WhiteVanilla, "White Vanilla");
-							ui.selectable_value(&mut mode, Gamemode::BlackOnion, "Black Onion");
+							// ui.selectable_value(&mut mode, Gamemode::BlackOnion, "Black Onion");
 						});
 				})
 			});

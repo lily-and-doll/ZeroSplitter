@@ -23,7 +23,7 @@ A "category" is a set of splits and personal bests to run against. ZeroSplitter 
 you are playing and not overwrite scores from one mode with another - but don't push your luck: have the right 
 category selected before you take off.
 
-Press the plus button to add a new category - don't click Black Onion for the mode (it won't work at all). 
+Press the plus button to add a new category.
 
 Currently the only way to delete categories is by manually dropping them from the database, but you can rename them.
 

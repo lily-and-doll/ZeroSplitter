@@ -101,6 +101,8 @@ impl App for ZeroSplitter {
 
 				if let Ok(data) = self.calculate_splits() {
 					self.display_splits(ui, data);
+				} else {
+					ui.centered_and_justified(|ui| ui.label("Waiting for a run to start..."));
 				};
 
 				ui.label(format!(
