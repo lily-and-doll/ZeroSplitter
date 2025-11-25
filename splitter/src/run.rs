@@ -36,13 +36,6 @@ impl Run {
 		}
 	}
 
-	pub fn mults(&self) -> Result<Vec<u32>, ZeroError> {
-		match self {
-			Run::Inactive => Err(ZeroError::RunInactive),
-			Run::Active { splits, .. } => Ok(splits.iter().map(|s| s.mult).collect()),
-		}
-	}
-
 	pub fn start(&mut self, frame: FrameData) {
 		let mode = frame.difficulty.into();
 		*self = Self::Active {
