@@ -147,12 +147,11 @@ impl Database {
 
 			let run_id = self.conn.last_insert_rowid();
 
-			for (num, &split) in run.splits().unwrap().iter().take_while(|&&s| s > 0).enumerate() {
+			for (num, &split) in run.splits().unwrap().iter().take_while(|&&s| s.score > 0).enumerate() {
 				let final_split = num == run.current_split().unwrap();
-				let mult = run.mults().unwrap()[num];
 				self.conn.execute(
 					"INSERT INTO splits (id, split_num, score, hits, mult, run_id, final, pattern_rank, dynamic_rank) VALUES(NULL, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-					params![num, split, 0, mult, run_id, final_split, ],
+					params![num, split.score, 0, split.mult, run_id, final_split, split.pattern_rank, split.dynamic_rank],
 				)?;
 			}
 

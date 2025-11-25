@@ -22,10 +22,17 @@ impl Run {
 		}
 	}
 
-	pub fn splits(&self) -> Result<Vec<i32>, ZeroError> {
+	pub fn scores(&self) -> Result<Vec<i32>, ZeroError> {
 		match self {
 			Run::Inactive => Err(ZeroError::RunInactive),
-			Run::Active { splits, .. } => Ok(splits.iter().map(|s| s.score).collect()),
+			Run::Active { splits, .. } => Ok(splits.iter().map(|x| x.score).collect()),
+		}
+	}
+
+	pub fn splits(&self) -> Result<Vec<SplitData>, ZeroError> {
+		match self {
+			Run::Inactive => Err(ZeroError::RunInactive),
+			Run::Active { splits, .. } => Ok(splits.iter().map(|&s| s).collect()),
 		}
 	}
 
@@ -79,12 +86,12 @@ impl Run {
 					*split_base_score = 0
 				}
 				let data = SplitData::new(
-					frame.total_score(),
+					frame.total_score() - *split_base_score,
 					frame.multiplier_one,
 					frame.pattern_rank,
 					frame.dynamic_rank,
 				);
-				splits.insert(*current_split, data);
+				*splits.get_mut(*current_split).unwrap() = data;
 
 				Ok(())
 			} else {
@@ -150,10 +157,10 @@ impl Run {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SplitData {
-	score: i32,
-	mult: u32,
-	pattern_rank: f32,
-	dynamic_rank: f32,
+	pub score: i32,
+	pub mult: u32,
+	pub pattern_rank: f32,
+	pub dynamic_rank: f32,
 }
 
 impl SplitData {

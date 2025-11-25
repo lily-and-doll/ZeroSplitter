@@ -102,7 +102,10 @@ impl App for ZeroSplitter {
 				if let Ok(data) = self.calculate_splits() {
 					self.display_splits(ui, data);
 				} else {
-					ui.centered_and_justified(|ui| ui.label("Waiting for a run to start..."));
+					ui.centered_and_justified(|ui| {
+						ui.style_mut().interaction.selectable_labels = false;
+						ui.label("Waiting for a run to start...")
+					});
 				};
 
 				ui.label(format!(
@@ -168,7 +171,7 @@ impl ZeroSplitter {
 	fn calculate_splits(&self) -> Result<Vec<(i32, i32, i32)>, ZeroError> {
 		// relative split: score gained during one split
 		// absolute split: total score during one split
-		let raw_splits = self.run.splits()?;
+		let raw_splits = self.run.scores()?;
 		let mut ret = Vec::new();
 		for (i, rel_split, abs_split) in raw_splits.iter().enumerate().map(|(i, &s)| {
 			(i, s, {
