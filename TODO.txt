@@ -1,0 +1,3 @@
+Add deleting categories
+Rework the pop up menus
+Add a settings menu?

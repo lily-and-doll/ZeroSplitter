@@ -1,6 +1,5 @@
 use std::{
 	env,
-	fs::{self, File},
 	net::UdpSocket,
 	sync::{
 		OnceLock,
@@ -15,13 +14,16 @@ use eframe::{
 	NativeOptions,
 	egui::{Context, IconData, ThemePreference, ViewportBuilder},
 };
-use log::{error, warn};
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
-use crate::theme::zeroranger_visuals;
+use crate::{app::Toggles, config::CONFIG, database::Database, run::Run, theme::zeroranger_visuals};
 
 mod app;
+mod config;
+mod database;
 mod hook;
+mod run;
 mod system;
 mod theme;
 mod ui;
@@ -31,11 +33,17 @@ const SPLIT_DELAY_FRAMES: u32 = 20;
 static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
 fn main() {
+	config::load_config().unwrap();
+	#[cfg(debug_assertions)]
+	unsafe {
+		env::set_var("RUST_BACKTRACE", "1");
+	}
+
 	pretty_env_logger::init();
 
 	let options = NativeOptions {
 		viewport: ViewportBuilder::default()
-			.with_inner_size([300., 290.])
+			.with_inner_size([300., 300.])
 			.with_icon(IconData::default())
 			.with_title("ZeroSplitter"),
 
@@ -53,6 +61,7 @@ fn main() {
 			let _ = EGUI_CTX.set(c.egui_ctx.clone());
 			c.egui_ctx.set_theme(ThemePreference::Dark);
 			c.egui_ctx.set_visuals(zeroranger_visuals());
+			c.egui_ctx.set_zoom_factor(CONFIG.get().unwrap().zoom_level);
 			Ok(Box::new(ZeroSplitter::load(rx)))
 		}),
 	)
@@ -80,123 +89,61 @@ fn ipc_thread(channel: Sender<FrameData>) {
 }
 
 struct ZeroSplitter {
-	categories: Vec<Category>,
-	current_category: usize,
+	categories: CategoryManager,
 	data_source: Receiver<FrameData>,
 	last_frame: FrameData,
-	current_run: Run,
-	current_split: Option<usize>,
-	current_split_score_offset: i32,
+	run: Run,
 	waiting_for_category: bool,
 	waiting_for_rename: bool,
 	waiting_for_confirm: bool,
 	dialog_rx: Receiver<Option<EntryDialogData>>,
 	dialog_tx: Sender<Option<EntryDialogData>>,
-	comparison: Category,
-	active: bool,
-	relative_score: bool,
-	show_gold_split: bool,
 	split_delay: Option<u32>,
-	names: bool,
+	db: Database,
+	toggles: Toggles,
 }
 
 impl ZeroSplitter {
-	fn new(data_source: Receiver<FrameData>) -> Self {
+	fn new(data_source: Receiver<FrameData>, db: Database) -> Self {
 		let (tx, rx) = mpsc::channel();
-		let default_categories = vec![
-			Category::new("Type-C GO".to_string(), Gamemode::GreenOrange),
-			Category::new("Type-B GO".to_string(), Gamemode::GreenOrange),
-			Category::new("Type-C WV".to_string(), Gamemode::WhiteVanilla),
-			Category::new("Type-B WV".to_string(), Gamemode::WhiteVanilla),
-		];
-		Self {
-			categories: default_categories,
+		let mut zerosplitter = Self {
+			categories: CategoryManager::init(),
 			data_source,
 			last_frame: FrameData::default(),
-			current_category: 0,
-			current_run: Run::new(Gamemode::GreenOrange),
-			current_split: None,
-			current_split_score_offset: 0,
+			run: Run::Inactive,
 			dialog_rx: rx,
 			dialog_tx: tx,
 			waiting_for_category: false,
 			waiting_for_rename: false,
 			waiting_for_confirm: false,
-			comparison: Category::new("<null>".to_string(), Gamemode::GreenOrange),
-			active: false,
-			relative_score: true,
-			show_gold_split: true,
 			split_delay: None,
-			names: false,
-		}
+			db,
+			toggles: Toggles {
+				names: false,
+				relative_score: true,
+				show_gold_split: true,
+				decorations: true,
+			},
+		};
+
+		zerosplitter.categories.load(&zerosplitter.db).unwrap();
+
+		zerosplitter
 	}
 
 	fn load(data_source: Receiver<FrameData>) -> Self {
-		let data_path = env::current_exe()
-			.expect("Could not get program directory")
-			.with_file_name("zs_data.json");
+		let db = Database::init().unwrap();
 
-		match fs::exists(&data_path) {
-			Ok(true) => (),
-			Ok(false) => return Self::new(data_source),
-			Err(e) => {
-				warn!("Could not tell if data file exists: {e}");
-				return Self::new(data_source);
-			}
-		}
-
-		match File::open(&data_path) {
-			Ok(file) => {
-				let try_new_cat = serde_json::from_reader::<_, Vec<Category>>(&file);
-				if let Ok(data) = try_new_cat {
-					if data.is_empty() {
-						Self::new(data_source)
-					} else {
-						Self {
-							current_category: 0,
-							categories: data,
-							..Self::new(data_source)
-						}
-					}
-				} else {
-					// An attempt at old-save migration. Probably doesn't work.
-					let try_old_cat = serde_json::from_reader::<_, Vec<OldCategory>>(&file);
-					if let Ok(data) = try_old_cat {
-						Self {
-							current_category: 0,
-							categories: data.iter().map(|c| c.to_new(Gamemode::GreenOrange)).collect(),
-							..Self::new(data_source)
-						}
-					} else {
-						panic!(
-							"Data failed to parse as Category or OldCategory at {:?}: {} and {}",
-							&data_path,
-							try_new_cat.unwrap_err(),
-							try_old_cat.unwrap_err()
-						)
-					}
-				}
-			}
-			Err(e) => panic!("Could not open extant data file at {:?}: {}", &data_path, e),
-		}
+		Self::new(data_source, db.clone())
 	}
 
 	fn save_splits(&mut self) {
-		self.categories[self.current_category].update_from_run(&self.current_run);
+		if self.run.is_active() && self.run.scores().unwrap().iter().sum::<i32>() > 0 {
+			debug!("Saving splits");
 
-		let data_path = env::current_exe()
-			.expect("Could not get program directory")
-			.with_file_name("zs_data.json");
-		let file = match File::create(&data_path) {
-			Ok(file) => file,
-			Err(err) => {
-				error!("Could not save: Could not open data file {:?}: {}", &data_path, err);
-				return;
+			if let Err(err) = self.db.insert_run(&self.categories, &self.run) {
+				error!("Error writing run to database: {err}");
 			}
-		};
-
-		if let Err(err) = serde_json::to_writer_pretty(file, &self.categories) {
-			error!("Error writing save: {err}");
 		}
 	}
 
@@ -213,40 +160,39 @@ impl ZeroSplitter {
 	}
 
 	fn update_greenorange(&mut self, frame: FrameData) {
-		// Skip update if current category isn't Green Orange
-		if self.categories[self.current_category].mode != Gamemode::GreenOrange {
+		// Skip update if current category isn't Green Orange or if on menu
+		if self.categories.current().mode != Gamemode::GreenOrange || frame.is_menu() {
 			return;
 		}
+
+		let frame_split = frame
+			.stage
+			.checked_sub(1)
+			.unwrap_or(0)
+			.checked_sub(frame.game_loop)
+			.unwrap_or(0) as usize;
 
 		// Reset if we just left the menu or returned to 1-1
 		if frame.stage != self.last_frame.stage && (self.last_frame.is_menu() || frame.is_first_stage()) {
 			self.reset();
+			self.run.start(frame);
+			self.run.set_split(frame_split).unwrap();
+			self.categories.refresh_comparison(&self.db).unwrap();
 		}
 
-		if !frame.is_menu() {
-			let frame_split = (frame.stage - 1 - frame.game_loop) as usize;
-
+		if !frame.is_menu() && self.run.is_active() {
 			if frame_split >= 8 {
 				// TLB or credits
 				return;
 			}
 
 			// Split if necessary
-			if frame.stage != self.last_frame.stage {
-				self.current_split = Some(frame_split);
-				self.current_split_score_offset = self.last_frame.total_score();
-				self.save_splits();
-			}
-
-			// If our score got reset by a continue, fix the score offset.
-			if self.current_split_score_offset > frame.total_score() {
-				self.current_split_score_offset = 0;
+			if (frame_split > self.run.current_split().unwrap()) && !self.last_frame.is_menu() {
+				self.run.split().unwrap();
 			}
 
 			// Update run and split scores
-			self.current_run.score = frame.total_score();
-			let split_score = frame.total_score() - self.current_split_score_offset;
-			self.current_run.splits[frame_split] = split_score;
+			self.run.update(frame).unwrap();
 		} else {
 			// End the run if we're back on the menu
 			self.end_run();
@@ -255,24 +201,28 @@ impl ZeroSplitter {
 
 	fn update_whitevanilla(&mut self, frame: FrameData) {
 		// Skip update if current category isn't White Vanilla or if on menu
-		if self.categories[self.current_category].mode != Gamemode::WhiteVanilla || frame.is_menu() {
+		if self.categories.current().mode != Gamemode::WhiteVanilla || frame.is_menu() {
 			return;
 		}
 
 		// Reset if we returned to 1-1
 		if frame.total_score() == 0 && self.last_frame.total_score() > 0 || self.last_frame.is_menu() {
 			self.reset();
-			self.current_split = match frame.stage {
-				1 => Some(0),
-				2 => Some(5),
-				3 => Some(12),
-				4 => Some(19),
-				_ => panic!("Stage out of bounds! {}", frame.stage),
-			};
+			self.run.start(frame);
+			self.run
+				.set_split(match frame.stage {
+					1 => 0,
+					2 => 5,
+					3 => 12,
+					4 => 19,
+					_ => panic!("Stage out of bounds! {}", frame.stage),
+				})
+				.unwrap();
+			self.categories.refresh_comparison(&self.db).unwrap();
 			return;
 		}
 
-		if !frame.is_menu() && self.active {
+		if !frame.is_menu() && !(self.run == Run::Inactive) {
 			// Split if necessary; score requirement prevents spurious splits after a reset
 			if frame.timer_wave == 0 && self.last_frame.timer_wave != 0 && frame.total_score() > 0 {
 				self.split_delay = Some(SPLIT_DELAY_FRAMES);
@@ -282,19 +232,13 @@ impl ZeroSplitter {
 				if split_delay > 1 {
 					self.split_delay = Some(split_delay - 1)
 				} else {
-					self.current_split = self.current_split.or(Some(0)).map(|s| s + 1);
-					self.current_split_score_offset = self.last_frame.total_score();
-					self.save_splits();
+					self.run.split().unwrap();
 					self.split_delay = None
 				}
 			}
 
-			// TODO: reimplement continue support
-
 			// Update run and split scores
-			self.current_run.score = frame.total_score();
-			let split_score = frame.total_score() - self.current_split_score_offset;
-			self.current_run.splits[self.current_split.unwrap_or(0)] = split_score;
+			self.run.update(frame).unwrap();
 		} else if frame.is_menu() {
 			// End the run if we're back on the menu
 			self.end_run();
@@ -302,18 +246,13 @@ impl ZeroSplitter {
 	}
 
 	fn reset(&mut self) {
-		self.end_run();
-		self.current_run = Run::new(self.categories[self.current_category].mode);
-		self.comparison = self.categories[self.current_category].clone();
-		self.current_split = Some(0);
-		self.active = true;
-		self.current_split_score_offset = 0;
+		self.save_splits();
+		self.run.reset();
 	}
 
 	fn end_run(&mut self) {
 		self.save_splits();
-		self.current_split = None;
-		self.active = false;
+		self.run.stop()
 	}
 }
 
@@ -333,122 +272,20 @@ impl Gamemode {
 		}
 	}
 }
+
+impl From<i8> for Gamemode {
+	fn from(value: i8) -> Self {
+		match value {
+			-1 => Self::WhiteVanilla,
+			0 => Self::GreenOrange,
+			1 => panic!("illegal black onion detected"),
+			_ => panic!(),
+		}
+	}
+}
 pub struct EntryDialogData {
 	pub textbox: String,
 	pub mode: Gamemode,
-}
-
-/// Translation of function of the same name in ZR.
-/// Checkpoints in WV have the same stage/checkpoint as in GO,
-/// e.g. the cloudoo segment in stage 1 is technically stage 3 checkpoint 2
-/// just like it is in GO. Also, some segments have multiple checkpoints.
-/// This function gets the segment number in WV from the GO data.
-/// "Realm" seems to indicate when the ship is changed, like in TLB, the dream, or bonus stages
-///
-/// Someone much smarter than me could try to call this function directly from the
-/// game instead of using this.
-fn vanilla_get_simstage(stage: u8, checkpoint: u8, checkpoint_sub: u8, realm: u8) -> Result<(u32, u32), ()> {
-	Ok(match (stage, checkpoint) {
-		//  GO stage/check => WV stage/check
-		(1, _) if realm == 3 => (1, 4),
-		(1, 0 | 1) => (1, 0),
-		(1, 2) => (2, 4),
-		(1, 3) => (1, 2),
-		(1, 4 | 5 | 6) => (1, 3),
-
-		(2, _) if realm == 3 => (2, 6),
-		(2, 0 | 1) => (2, 0),
-		(2, 2) => (3, 1),
-		(2, 3) => (2, 1),
-		(2, 4) => (2, 3),
-		(2, 5) => (4, 1),
-		(2, 6 | 7 | 8) => (2, 5),
-
-		(3, 0) => (3, 0),
-		(3, 1) => (1, 1),
-		(3, 2) => (4, 4),
-		(3, 3) => (3, 2),
-		(3, 4) if checkpoint_sub < 1 => (2, 2),
-		(3, 4) => (3, 3),
-
-		(3, 6) => (4, 3),
-		(3, 7) => (3, 4),
-		(3, 8 | 9) => (3, 5),
-
-		(4, _) if realm == 3 => (3, 6),
-		(4, 3) => (3, 6),
-		(4, 5 | 6) => (4, 0),
-		(4, 7 | 8) => (4, 2),
-		(4, 9 | 10) => (4, 5),
-		_ => return Err(()),
-	})
-}
-
-/// Translate sim stage and checkpoint to split count
-/// e.g. snake is split 7 (0 indexed)
-fn vanilla_get_split_count(simstage: u32, simcheckpoint: u32) -> usize {
-	[
-		(1, 1),
-		(1, 2),
-		(1, 3),
-		(1, 4),
-		(1, 5),
-		(2, 1),
-		(2, 2),
-		(2, 3),
-		(2, 4),
-		(2, 5),
-		(2, 6),
-		(2, 7),
-		(3, 1),
-		(3, 2),
-		(3, 3),
-		(3, 4),
-		(3, 5),
-		(3, 6),
-		(3, 7),
-		(4, 1),
-		(4, 2),
-		(4, 3),
-		(4, 4),
-		(4, 5),
-		(4, 6),
-		(4, 7),
-	]
-	.iter()
-	.position(|&x| x == (simstage, simcheckpoint + 1))
-	.unwrap()
-}
-
-fn vanilla_stage_from_split(split: usize) -> (u32, u32) {
-	[
-		(1, 1),
-		(1, 2),
-		(1, 3),
-		(1, 4),
-		(1, 5),
-		(2, 1),
-		(2, 2),
-		(2, 3),
-		(2, 4),
-		(2, 5),
-		(2, 6),
-		(2, 7),
-		(3, 1),
-		(3, 2),
-		(3, 3),
-		(3, 4),
-		(3, 5),
-		(3, 6),
-		(3, 7),
-		(4, 1),
-		(4, 2),
-		(4, 3),
-		(4, 4),
-		(4, 5),
-		(4, 6),
-		(4, 7),
-	][split]
 }
 
 fn vanilla_split_names(split: usize) -> &'static str {
@@ -495,82 +332,148 @@ struct OldRun {
 	score: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Run {
-	splits: Vec<i32>,
-	score: i32,
-	mode: Gamemode,
+// #[derive(Debug, Serialize, Deserialize, Clone)]
+// struct Run {
+// 	splits: Vec<i32>,
+// 	score: i32,
+// 	mode: Gamemode,
+// 	active: bool
+// }
+
+// impl Run {
+// 	fn new(mode: Gamemode) -> Self {
+// 		Run {
+// 			splits: vec![0; mode.splits()],
+// 			score: 0,
+// 			mode,
+// 			active: false,
+// 		}
+// 	}
+
+// 	fn start(&mut self, category: &CategoryManager) {
+// 		if category.current().mode == self.mode {
+// 			self.splits = vec![0; self.mode.splits()];
+// 			self.score = 0;
+// 			self.active = true
+// 		}
+// 	}
+
+// 	fn stop(&mut self) {
+// 		self.active = false
+// 	}
+// }
+
+struct CategoryManager {
+	categories: Vec<Category>,
+	current: usize,
+	comparison_cache: Vec<i32>,
 }
 
-impl Run {
-	fn new(mode: Gamemode) -> Self {
-		Run {
-			splits: vec![0; mode.splits()],
-			score: 0,
-			mode,
+impl CategoryManager {
+	fn init() -> Self {
+		CategoryManager {
+			categories: Vec::new(),
+			current: 0,
+			comparison_cache: Vec::new(),
 		}
 	}
-}
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct OldCategory {
-	personal_best: OldRun,
-	best_splits: [i32; 8],
-	name: String,
-}
+	fn current(&self) -> &Category {
+		&self.categories.get(self.current).unwrap()
+	}
 
-impl OldRun {
-	fn to_new(self) -> Run {
-		Run {
-			splits: self.splits.to_vec(),
-			score: self.score,
-			mode: Gamemode::GreenOrange,
+	fn current_mut(&mut self) -> &mut Category {
+		&mut self.categories[self.current]
+	}
+
+	#[must_use]
+	pub fn push(&mut self, name: String, mode: Gamemode, db: &Database) -> Result<(), ZeroError> {
+		let id = db
+			.insert_new_category(name.clone(), mode)
+			.map_err(ZeroError::DatabaseError)?;
+		self.categories.push(Category { name, mode, id });
+		Ok(())
+	}
+
+	pub fn index(&self, index: usize) -> Option<&Category> {
+		self.categories.get(index)
+	}
+
+	pub fn len(&self) -> usize {
+		self.categories.len()
+	}
+
+	/// Populate the CategoryManager with data from the database
+	pub fn load(&mut self, db: &Database) -> Result<(), ZeroError> {
+		self.categories = db.get_categories().map_err(ZeroError::DatabaseError)?;
+		Ok(())
+	}
+
+	pub fn delete_current(&mut self, db: &Database) -> Result<usize, ZeroError> {
+		if self.categories.len() > 1 {
+			db.delete_category(self.categories.remove(self.current))
+				.map_err(ZeroError::DatabaseError)
+		} else {
+			Err(ZeroError::Illegal)
 		}
 	}
-}
 
-impl OldCategory {
-	fn to_new(&self, mode: Gamemode) -> Category {
-		Category {
-			personal_best: self.personal_best.to_new(),
-			best_splits: self.best_splits.to_vec(),
-			name: self.name.clone(),
-			mode,
+	pub fn rename_current(&mut self, db: &Database, new_name: String) -> Result<usize, ZeroError> {
+		self.current_mut().name = new_name.clone();
+		db.rename_category(self.current(), new_name)
+			.map_err(ZeroError::DatabaseError)
+	}
+
+	/// Sets the current selected category by index.
+	/// Returns true if the category changed
+	pub fn set_current(&mut self, new_idx: usize, db: &Database) -> Result<bool, ZeroError> {
+		if new_idx == self.current {
+			return Ok(false);
+		} else if new_idx >= self.categories.len() {
+			return Err(ZeroError::CategoryOutOfRange);
 		}
+		self.current = new_idx;
+		self.refresh_comparison(db)?;
+
+		Ok(true)
+	}
+
+	pub fn get_comparison(&self) -> &Vec<i32> {
+		if self.comparison_cache.len() == 0 {
+			panic!()
+		}
+		&self.comparison_cache
+	}
+
+	pub fn refresh_comparison(&mut self, db: &Database) -> Result<(), ZeroError> {
+		self.comparison_cache = match db.get_pb_run(self) {
+			Ok((scores, _, mode)) if mode == self.current().mode => scores,
+			Ok(_) => return Err(ZeroError::DifficultyMismatch),
+			Err(rusqlite::Error::QueryReturnedNoRows) => vec![0; self.current().mode.splits()],
+			Err(e) => return Err(ZeroError::DatabaseError(e)),
+		};
+		Ok(())
 	}
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Category {
-	personal_best: Run,
-	best_splits: Vec<i32>,
 	name: String,
 	mode: Gamemode,
+	id: i64,
 }
 
-impl Category {
-	fn new(name: String, mode: Gamemode) -> Self {
-		Category {
-			personal_best: Run::new(mode),
-			best_splits: vec![0; mode.splits()],
-			name,
-			mode,
-		}
-	}
-
-	fn update_from_run(&mut self, run: &Run) {
-		if run.mode != self.mode {
-			return;
-		}
-
-		if run.score > self.personal_best.score {
-			self.personal_best = run.clone();
-		}
-
-		for (best, new) in self.best_splits.iter_mut().zip(run.splits.iter()) {
-			if *new > *best {
-				*best = *new;
-			}
-		}
-	}
+#[derive(Debug)]
+#[non_exhaustive]
+#[allow(dead_code)]
+enum ZeroError {
+	Illegal,
+	DatabaseError(rusqlite::Error),
+	RunInactive,
+	DifficultyMismatch,
+	SplitOutOfRange,
+	CategoryOutOfRange,
+	IOError(std::io::Error),
+	TOMLError(toml::de::Error),
+	StaticAlreadyInit,
 }

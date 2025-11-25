@@ -1,43 +1,8 @@
 use std::{sync::mpsc::Sender, time::Duration};
 
-use eframe::egui::{CentralPanel, ComboBox, Context, Id, Key, TopBottomPanel, ViewportBuilder, ViewportId};
+use eframe::egui::{CentralPanel, ComboBox, Context, Id, TopBottomPanel, ViewportBuilder, ViewportId};
 
 use crate::{EGUI_CTX, EntryDialogData, Gamemode};
-
-pub fn entry_dialog(ctx: &Context, tx: Sender<String>, msg: &'static str) {
-	let vp_builder = ViewportBuilder::default()
-		.with_title("ZeroSplitter")
-		.with_active(true)
-		.with_resizable(false)
-		.with_minimize_button(false)
-		.with_maximize_button(false)
-		.with_inner_size([200., 100.]);
-
-	ctx.show_viewport_deferred(ViewportId::from_hash_of("entry dialog"), vp_builder, move |ctx, _| {
-		if ctx.input(|input| input.viewport().close_requested()) {
-			let _ = tx.send(String::new());
-			request_repaint();
-			return;
-		}
-
-		let text_id = Id::new("edit text");
-		let mut edit_str = ctx.data_mut(|data| data.get_temp_mut_or_insert_with(text_id, String::new).clone());
-
-		CentralPanel::default().show(ctx, |ui| {
-			ui.vertical_centered_justified(|ui| {
-				ui.label(msg);
-				if ui.text_edit_singleline(&mut edit_str).lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-					let _ = tx.send(edit_str.clone());
-					request_repaint();
-				}
-			});
-		});
-
-		ctx.data_mut(|data| {
-			data.insert_temp(text_id, edit_str);
-		});
-	});
-}
 
 /// Category entry dialoge menu with a gamemode dropdown.
 pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>, msg: &'static str, mode_select: bool) {
@@ -84,7 +49,7 @@ pub fn category_maker_dialog(ctx: &Context, tx: Sender<Option<EntryDialogData>>,
 						.show_ui(ui, |ui| {
 							ui.selectable_value(&mut mode, Gamemode::GreenOrange, "Green Orange");
 							ui.selectable_value(&mut mode, Gamemode::WhiteVanilla, "White Vanilla");
-							ui.selectable_value(&mut mode, Gamemode::BlackOnion, "Black Onion");
+							// ui.selectable_value(&mut mode, Gamemode::BlackOnion, "Black Onion");
 						});
 				})
 			});

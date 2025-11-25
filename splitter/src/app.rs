@@ -1,14 +1,22 @@
 use eframe::{
 	App, Frame,
-	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sides},
+	egui::{Align, CentralPanel, Color32, ComboBox, Context, Id, Layout, Sense, Sides, Ui},
 };
 
 use crate::{
-	Category, Gamemode, ZeroSplitter,
+	Gamemode, Run, ZeroError, ZeroSplitter,
+	config::CONFIG,
 	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, LIGHT_ORANGE},
 	ui::{category_maker_dialog, confirm_dialog},
 	vanilla_descriptive_split_names, vanilla_split_names,
 };
+
+pub struct Toggles {
+	pub names: bool,
+	pub relative_score: bool,
+	pub show_gold_split: bool,
+	pub decorations: bool,
+}
 
 impl App for ZeroSplitter {
 	fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
@@ -18,13 +26,20 @@ impl App for ZeroSplitter {
 
 		// Detect gamemode change persist between frames
 		let prev_mode_id = Id::new("prev_mode");
-		let cur_mode = self.categories[self.current_category].mode;
+		let cur_mode = self.categories.current().mode;
 		if let Some(prev_mode) = ctx.data(|data| data.get_temp::<Gamemode>(prev_mode_id))
 			&& prev_mode != cur_mode
 		{
-			let min_size = match self.categories[self.current_category].mode {
-				Gamemode::GreenOrange => eframe::egui::Vec2 { x: 300.0, y: 300.0 },
-				Gamemode::WhiteVanilla => eframe::egui::Vec2 { x: 300.0, y: 650.0 },
+			let zoom_level = CONFIG.get().unwrap().zoom_level;
+			let min_size = match self.categories.current().mode {
+				Gamemode::GreenOrange => eframe::egui::Vec2 {
+					x: 300.0 * zoom_level,
+					y: 300.0 * zoom_level,
+				},
+				Gamemode::WhiteVanilla => eframe::egui::Vec2 {
+					x: 300.0 * zoom_level,
+					y: 650.0 * zoom_level,
+				},
 				Gamemode::BlackOnion => todo!(),
 			};
 			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));
@@ -33,23 +48,46 @@ impl App for ZeroSplitter {
 		}
 		ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
 
-		let cur_category = &self.categories[self.current_category];
-
 		CentralPanel::default().show(ctx, |ui| {
+			if !self.toggles.decorations
+				&& ui
+					.interact(ui.max_rect(), Id::new("window_drag"), Sense::drag())
+					.dragged()
+			{
+				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::StartDrag);
+			}
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
 				ui.horizontal(|ui| {
-					ui.toggle_value(&mut self.relative_score, "RELATIVE")
+					ui.toggle_value(&mut self.toggles.relative_score, "RELATIVE")
 						.on_hover_text("Display relative score per split or running total of score");
-					ui.toggle_value(&mut self.show_gold_split, "BEST SPLITS")
+					ui.toggle_value(&mut self.toggles.show_gold_split, "BEST SPLITS")
 						.on_hover_text("Show your PB's splits or your best splits on the left");
-					ui.toggle_value(&mut self.names, "NAMES")
+					ui.toggle_value(&mut self.toggles.names, "NAMES")
 						.on_hover_text("Toggle descriptive or number names for WV splits");
+					if CONFIG.get().unwrap().decoration_button {
+						let deco_toggle = ui
+							.toggle_value(&mut self.toggles.decorations, "DECOR")
+							.on_hover_text("Toggle the decoration (title bar...)");
+						if deco_toggle.changed() && self.toggles.decorations {
+							ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(true));
+						} else if deco_toggle.changed() {
+							ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Decorations(false));
+						}
+					}
 				});
 				ui.horizontal(|ui| {
 					ui.label("Category: ");
-					ComboBox::from_label("").show_index(ui, &mut self.current_category, self.categories.len(), |i| {
-						&self.categories[i].name
-					});
+					{
+						let len = self.categories.len();
+						let mut cat_idx = self.categories.current;
+						ComboBox::from_label("")
+							.show_index(ui, &mut cat_idx, len, |i| &self.categories.index(i).unwrap().name);
+						if self.categories.current != cat_idx {
+							self.end_run();
+							self.categories.set_current(cat_idx, &self.db).unwrap();
+						}
+					}
+
 					if ui.small_button("+").clicked() {
 						self.waiting_for_category = true;
 					}
@@ -61,133 +99,30 @@ impl App for ZeroSplitter {
 					}
 				});
 
-				// relative split: score gained during one split
-				// absolute split: total score during one split
-				for (i, rel_split, abs_split) in self.current_run.splits.iter().enumerate().map(|(i, &s)| {
-					(i, s, {
-						self.current_run
-							.splits
-							.iter()
-							.enumerate()
-							.take_while(|&(idx, _)| idx <= i)
-							.fold(0, |acc, (_, &s)| acc + s)
-					})
-				}) {
-					let split = if self.relative_score { rel_split } else { abs_split };
-					// translate split number to stage/loop for GO
-					let stage_n = (i & 3) + 1;
-					let loop_n = (i >> 2) + 1;
-					// Get relative/absolute gold split
-					// Gold split = high score of this split in any run
-					let gold_split = if self.relative_score {
-						cur_category.best_splits[i]
-					} else {
-						cur_category
-							.best_splits
-							.iter()
-							.enumerate()
-							.take_while(|&(idx, _)| idx <= i)
-							.fold(0, |acc, (_, &s)| acc + s)
-					};
-					// Get relative/absolute split in the PB
-					// PB split = score of this split in the PB run
-					let rel_pb_split = self.comparison.personal_best.splits[i];
-					let abs_pb_split = self
-						.comparison
-						.personal_best
-						.splits
-						.iter()
-						.enumerate()
-						.take_while(|&(idx, _)| idx <= i)
-						.fold(0, |acc, (_, &s)| acc + s);
+				if let Ok(data) = self.calculate_splits() {
+					self.display_splits(ui, data);
+				} else {
+					ui.centered_and_justified(|ui| {
+						ui.style_mut().interaction.selectable_labels = false;
+						ui.label("Waiting for a run to start...")
+					});
+				};
 
-					let pb_split = if self.relative_score {
-						rel_pb_split
-					} else {
-						abs_pb_split
-					};
-
-					Sides::new().show(
-						ui,
-						|left| {
-							match cur_category.mode {
-								Gamemode::GreenOrange => left.label(format!("{loop_n}-{stage_n}")),
-								Gamemode::WhiteVanilla => {
-									if self.names {
-										left.label(vanilla_descriptive_split_names(i))
-									} else {
-										left.label(vanilla_split_names(i))
-									}
-								}
-								Gamemode::BlackOnion => todo!(),
-							};
-
-							if self.show_gold_split {
-								if gold_split > 0 {
-									left.colored_label(GREEN, gold_split.to_string());
-								}
-							} else if pb_split > 0 {
-								left.colored_label(GREEN, pb_split.to_string());
-							}
-						},
-						|right| {
-							// Only write splits up to the current split
-							if i <= self.current_split.unwrap_or(0) {
-								// Set color of split (rightmost number)
-								let split_color = if self.current_split == Some(i) && self.split_delay.is_none() {
-									Color32::WHITE
-								} else if split >= gold_split {
-									DARKER_ORANGE
-								} else {
-									DARK_ORANGE
-								};
-
-								right.colored_label(split_color, split.to_string());
-
-								if i < self.current_split.unwrap_or(0) {
-									// past split, we should show a diff
-									let diff = split - pb_split;
-									if self.relative_score {
-										let diff_color = if diff > 0 {
-											LIGHT_ORANGE
-										} else if diff == 0 {
-											Color32::WHITE
-										} else {
-											DARK_GREEN
-										};
-										right.colored_label(diff_color, format!("{diff:+}"));
-									} else {
-										let rel_diff = rel_split - rel_pb_split;
-										let diff_color = if diff > 0 {
-											if rel_diff > 0 { LIGHT_ORANGE } else { DARKER_ORANGE }
-										} else if diff == 0 {
-											Color32::WHITE
-										} else if rel_diff > 0 {
-											DARK_GREEN
-										} else {
-											DARKER_GREEN
-										};
-										right.colored_label(diff_color, format!("{diff:+}"));
-									}
-								}
-							} else {
-								right.colored_label(DARK_GREEN, "--");
-							}
-						},
-					);
-				}
-
-				ui.label(format!("Personal Best: {}", cur_category.personal_best.score));
-				ui.label(format!("Sum of Best: {}", cur_category.best_splits.iter().sum::<i32>()))
+				ui.label(format!(
+					"Personal Best: {}",
+					self.db.get_pb_run(&self.categories).map_or(0, |r| r.1)
+				));
+				ui.label(format!(
+					"Sum of Best: {}",
+					self.db.get_gold_splits(&self.categories).map_or(0, |s| s.iter().sum())
+				));
 			});
 		});
 
 		if self.waiting_for_category {
 			if let Ok(new_category) = self.dialog_rx.try_recv() {
 				if let Some(data) = new_category {
-					self.categories.push(Category::new(data.textbox, data.mode));
-					self.current_category = self.categories.len() - 1;
-					self.save_splits();
+					self.categories.push(data.textbox, data.mode, &self.db).unwrap();
 				}
 				self.waiting_for_category = false;
 			} else {
@@ -196,11 +131,9 @@ impl App for ZeroSplitter {
 		}
 
 		if self.waiting_for_rename {
-			if let Ok(new_category) = self.dialog_rx.try_recv() {
-				if let Some(data) = new_category {
-					self.categories[self.current_category].name = data.textbox;
-					self.categories[self.current_category].mode = data.mode;
-					self.save_splits();
+			if let Ok(rename_category) = self.dialog_rx.try_recv() {
+				if let Some(data) = rename_category {
+					self.categories.rename_current(&self.db, data.textbox).unwrap();
 				}
 				self.waiting_for_rename = false;
 			} else {
@@ -211,8 +144,7 @@ impl App for ZeroSplitter {
 		if self.waiting_for_confirm {
 			if let Ok(Some(confirmation)) = self.dialog_rx.try_recv() {
 				if confirmation.textbox == "Deleted" {
-					self.categories.remove(self.current_category);
-					self.current_category = self.current_category.saturating_sub(1);
+					self.categories.delete_current(&self.db).unwrap();
 				}
 				self.waiting_for_confirm = false;
 			} else {
@@ -221,7 +153,7 @@ impl App for ZeroSplitter {
 					self.dialog_tx.clone(),
 					format!(
 						"Are you sure you want to delete category {}?",
-						self.categories[self.current_category].name
+						self.categories.current().name
 					),
 				);
 			}
@@ -229,6 +161,143 @@ impl App for ZeroSplitter {
 	}
 
 	fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-		self.save_splits();
+		if let Run::Active { .. } = self.run {
+			self.save_splits();
+		}
+	}
+}
+
+impl ZeroSplitter {
+	fn calculate_splits(&self) -> Result<Vec<(i32, i32, i32)>, ZeroError> {
+		// relative split: score gained during one split
+		// absolute split: total score during one split
+		let raw_splits = self.run.scores()?;
+		let mut ret = Vec::new();
+		for (i, rel_split, abs_split) in raw_splits.iter().enumerate().map(|(i, &s)| {
+			(i, s, {
+				raw_splits
+					.clone()
+					.iter()
+					.enumerate()
+					.take_while(|&(idx, _)| idx <= i)
+					.fold(0, |acc, (_, &s)| acc + s)
+			})
+		}) {
+			let split = if self.toggles.relative_score {
+				rel_split
+			} else {
+				abs_split
+			};
+			// Get relative/absolute gold split
+			// Gold split = high score of this split in any run
+			let best_splits = self.db.get_gold_splits(&self.categories);
+			let gold_split = match (best_splits, self.toggles.relative_score) {
+				(Ok(splits), true) => *splits.get(i).unwrap_or(&0),
+				(Ok(splits), false) => splits
+					.iter()
+					.enumerate()
+					.take_while(|&(idx, _)| idx <= i)
+					.fold(0, |acc, (_, &s)| acc + s),
+				_ => 0,
+			};
+			// Get relative/absolute split in the PB
+			// PB split = score of this split in the PB run
+			let compare = self.categories.get_comparison();
+			let rel_pb_split = *compare.get(i).unwrap_or(&0);
+			let abs_pb_split = compare
+				.iter()
+				.enumerate()
+				.take_while(|&(idx, _)| idx <= i)
+				.fold(0, |acc, (_, &s)| acc + s);
+
+			let pb_split = if self.toggles.relative_score {
+				rel_pb_split
+			} else {
+				abs_pb_split
+			};
+
+			ret.push((gold_split, split, pb_split));
+		}
+		Ok(ret)
+	}
+
+	fn display_splits(&self, ui: &mut Ui, split_data: Vec<(i32, i32, i32)>) {
+		let current_split = self.run.current_split().unwrap_or(0);
+
+		for (n, &(gold_score, current_score, compare_score)) in split_data.iter().enumerate() {
+			// translate split number to stage/loop for GO
+			let stage_n = (n & 3) + 1;
+			let loop_n = (n >> 2) + 1;
+			Sides::new().show(
+				ui,
+				|left| {
+					match self.categories.current().mode {
+						Gamemode::GreenOrange => left.label(format!("{loop_n}-{stage_n}")),
+						Gamemode::WhiteVanilla => {
+							if self.toggles.names {
+								left.label(vanilla_descriptive_split_names(n))
+							} else {
+								left.label(vanilla_split_names(n))
+							}
+						}
+						Gamemode::BlackOnion => todo!(),
+					};
+
+					if self.toggles.show_gold_split {
+						if gold_score > 0 {
+							left.colored_label(GREEN, gold_score.to_string());
+						}
+					} else if compare_score > 0 {
+						left.colored_label(GREEN, compare_score.to_string());
+					}
+				},
+				|right| {
+					// Only write splits up to the current split
+					if n <= self.run.current_split().unwrap() {
+						// Set color of split (rightmost number)
+						let split_color = if current_split == n && self.split_delay.is_none() {
+							Color32::WHITE
+						} else if current_score >= gold_score {
+							DARKER_ORANGE
+						} else {
+							DARK_ORANGE
+						};
+
+						right.colored_label(split_color, current_score.to_string());
+
+						if n < current_split {
+							// past split, we should show a diff
+							let diff = current_score - compare_score;
+							if self.toggles.relative_score {
+								let diff_color = if diff > 0 {
+									LIGHT_ORANGE
+								} else if diff == 0 {
+									Color32::WHITE
+								} else {
+									DARK_GREEN
+								};
+								right.colored_label(diff_color, format!("{diff:+}"));
+							} else {
+								let &(_, prev_score, prev_compare) =
+									n.checked_sub(1).map_or(&(0, 0, 0), |n| split_data.get(n).unwrap());
+								let rel_diff = (current_score - prev_score) - (compare_score - prev_compare);
+								let diff_color = if diff > 0 {
+									if rel_diff > 0 { LIGHT_ORANGE } else { DARKER_ORANGE }
+								} else if diff == 0 {
+									Color32::WHITE
+								} else if rel_diff > 0 {
+									DARK_GREEN
+								} else {
+									DARKER_GREEN
+								};
+								right.colored_label(diff_color, format!("{diff:+}"));
+							}
+						}
+					} else {
+						right.colored_label(DARK_GREEN, "--");
+					}
+				},
+			);
+		}
 	}
 }
