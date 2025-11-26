@@ -27,7 +27,7 @@ pub const BLACK: Color32 = Color32::BLACK;
 pub fn zeroranger_visuals() -> egui::Visuals {
 	egui::Visuals {
 		window_fill: BLACK,
-		extreme_bg_color: BLACK,
+		extreme_bg_color: GREENEST,
 		panel_fill: BLACK,
 		widgets: egui::style::Widgets {
 			inactive: egui::style::WidgetVisuals {
@@ -66,7 +66,11 @@ pub fn zeroranger_visuals() -> egui::Visuals {
 			noninteractive: WidgetVisuals {
 				bg_fill: LIGHT_ORANGE,
 				weak_bg_fill: LIGHT_ORANGE,
-				bg_stroke: Stroke { ..Default::default() },
+				bg_stroke: Stroke {
+					color: GREEN,
+					width: 1.0,
+					..Default::default()
+				},
 				corner_radius: CornerRadius::ZERO,
 				fg_stroke: Stroke {
 					width: 1.0,

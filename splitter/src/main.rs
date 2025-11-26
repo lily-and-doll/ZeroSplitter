@@ -34,6 +34,7 @@ static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
 fn main() {
 	config::load_config().unwrap();
+	let zoom_level = CONFIG.get().unwrap().zoom_level;
 	#[cfg(debug_assertions)]
 	unsafe {
 		env::set_var("RUST_BACKTRACE", "1");
@@ -43,7 +44,7 @@ fn main() {
 
 	let options = NativeOptions {
 		viewport: ViewportBuilder::default()
-			.with_inner_size([300., 300.])
+			.with_inner_size([300.0 * zoom_level, 300.0 * zoom_level])
 			.with_icon(IconData::default())
 			.with_title("ZeroSplitter"),
 
@@ -118,12 +119,7 @@ impl ZeroSplitter {
 			waiting_for_confirm: false,
 			split_delay: None,
 			db,
-			toggles: Toggles {
-				names: false,
-				relative_score: true,
-				show_gold_split: true,
-				decorations: true,
-			},
+			toggles: Default::default(),
 		};
 
 		zerosplitter.categories.load(&zerosplitter.db).unwrap();

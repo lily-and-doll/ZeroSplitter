@@ -5,7 +5,7 @@ use eframe::{
 
 use crate::{
 	Gamemode, Run, ZeroError, ZeroSplitter,
-	config::CONFIG,
+	config::{CONFIG, options_menu},
 	theme::{DARK_GREEN, DARK_ORANGE, DARKER_GREEN, DARKER_ORANGE, GREEN, LIGHT_ORANGE},
 	ui::{category_maker_dialog, confirm_dialog},
 	vanilla_descriptive_split_names, vanilla_split_names,
@@ -16,6 +16,19 @@ pub struct Toggles {
 	pub relative_score: bool,
 	pub show_gold_split: bool,
 	pub decorations: bool,
+	pub show_options_menu: bool,
+}
+
+impl Default for Toggles {
+	fn default() -> Self {
+		Self {
+			names: false,
+			relative_score: true,
+			show_gold_split: true,
+			decorations: true,
+			show_options_menu: false,
+		}
+	}
 }
 
 impl App for ZeroSplitter {
@@ -42,10 +55,10 @@ impl App for ZeroSplitter {
 				},
 				Gamemode::BlackOnion => todo!(),
 			};
-			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::MinInnerSize(min_size));
 			ctx.send_viewport_cmd(eframe::egui::ViewportCommand::InnerSize(min_size));
 			self.reset();
 		}
+
 		ctx.data_mut(|data| data.insert_temp(prev_mode_id, cur_mode));
 
 		CentralPanel::default().show(ctx, |ui| {
@@ -56,7 +69,19 @@ impl App for ZeroSplitter {
 			{
 				ctx.send_viewport_cmd(eframe::egui::ViewportCommand::StartDrag);
 			}
+
+			if self.toggles.show_options_menu {
+				options_menu(ctx, &self.db, &mut self.toggles.show_options_menu);
+			};
+
 			ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
+				ui.horizontal_top(|ui| {
+					ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+						if ui.button("⚙").clicked() {
+							self.toggles.show_options_menu = true;
+						}
+					});
+				});
 				ui.horizontal(|ui| {
 					ui.toggle_value(&mut self.toggles.relative_score, "RELATIVE")
 						.on_hover_text("Display relative score per split or running total of score");

@@ -1,0 +1,1 @@
+INSERT INTO runs (category, imported) VALUES (?1, true)

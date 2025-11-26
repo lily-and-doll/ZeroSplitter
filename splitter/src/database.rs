@@ -6,14 +6,37 @@ use rusqlite::{
 	types::{FromSql, ValueRef},
 };
 
-use crate::{Category, CategoryManager, Gamemode, Run};
+use crate::{Category, CategoryManager, Gamemode, Run, config::CONFIG};
 
 #[derive(Clone)]
 pub struct Database {
 	conn: Arc<Connection>,
 }
 
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+macro_rules! transaction {
+	($conn:expr, $inner:expr) => {{
+		$conn.execute("BEGIN TRANSACTION", ())?;
+
+		match (|| {
+			{
+				$inner
+			}
+
+			Ok::<(), rusqlite::Error>(())
+		})() {
+			Ok(_) => {
+				$conn.execute("COMMIT", ())?;
+				Ok(())
+			}
+			Err(err) => {
+				$conn.execute("ROLLBACK", ())?;
+				Err(err)
+			}
+		}
+	}};
+}
+
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 impl Database {
 	pub fn init() -> Result<Self> {
@@ -141,7 +164,7 @@ impl Database {
 			let res = stmt.query_one(params![category.name], |row| row.get::<usize, usize>(0))?;
 
 			self.conn.execute(
-				"INSERT INTO runs (id, category, datetime) VALUES(NULL, ?1, datetime('now'))",
+				"INSERT INTO runs (id, category, datetime, imported) VALUES(NULL, ?1, datetime('now'), false)",
 				params![res],
 			)?;
 
@@ -233,6 +256,10 @@ impl Database {
 						self.migrate2to3()?;
 						current_schema = 3
 					}
+					3 => {
+						self.migrate3to4()?;
+						current_schema = 4
+					}
 					_ => Err(rusqlite::Error::InvalidQuery)?,
 				};
 			}
@@ -268,6 +295,37 @@ impl Database {
 			"ALTER TABLE splits ADD COLUMN pattern_rank REAL;
 			ALTER TABLE splits ADD COLUMN dynamic_rank REAL;",
 		)
+	}
+
+	fn migrate3to4(&self) -> Result<usize> {
+		println!("Migrating schema 3 to 4...");
+		self.conn.pragma_update(Some("main"), "user_version", 4)?;
+		self.conn.execute("ALTER TABLE runs ADD COLUMN imported BOOLEAN", ())
+	}
+
+	pub fn import_run(&self, splits: Vec<i32>, category_name: &String) -> Result<()> {
+		transaction!(self.conn, {
+			let category_id =
+				self.conn
+					.query_one("SELECT id FROM categories WHERE name=?1", params![category_name], |r| {
+						r.get::<_, i32>(0)
+					})?;
+			self.conn
+				.execute(
+					"INSERT INTO runs (category, imported) VALUES (?1, true)",
+					params![category_id],
+				)
+				.unwrap();
+			let last = self.conn.last_insert_rowid();
+			for (idx, score) in splits.iter().enumerate() {
+				self.conn
+					.execute(
+						"INSERT INTO splits (split_num, score, run_id) VALUES (?1, ?2, ?3)",
+						params![idx as i32, score, last],
+					)
+					.unwrap();
+			}
+		})
 	}
 }
 
