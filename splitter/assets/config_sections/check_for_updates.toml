@@ -1,0 +1,4 @@
+# Checks for updates on launch. If an update is avaliable, a link will
+# be in the Options menu.
+check_for_updates = true
+

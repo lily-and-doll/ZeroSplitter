@@ -1,0 +1,4 @@
+# Scale factor for the entire UI. 2.0 = twice as large as normal.
+# The program is 300x300 in GO mode and 300x650 at 1.0 zoom, for reference
+zoom_level = 1.0
+

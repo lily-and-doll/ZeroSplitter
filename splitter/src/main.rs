@@ -27,8 +27,11 @@ mod run;
 mod system;
 mod theme;
 mod ui;
+mod update;
 
 const SPLIT_DELAY_FRAMES: u32 = 20;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static EGUI_CTX: OnceLock<Context> = OnceLock::new();
 
@@ -384,9 +387,7 @@ impl CategoryManager {
 
 	#[must_use]
 	pub fn push(&mut self, name: String, mode: Gamemode, db: &Database) -> Result<(), ZeroError> {
-		let id = db
-			.insert_new_category(name.clone(), mode)
-			.map_err(ZeroError::DatabaseError)?;
+		let id = db.insert_new_category(name.clone(), mode)?;
 		self.categories.push(Category { name, mode, id });
 		Ok(())
 	}
@@ -401,7 +402,7 @@ impl CategoryManager {
 
 	/// Populate the CategoryManager with data from the database
 	pub fn load(&mut self, db: &Database) -> Result<(), ZeroError> {
-		self.categories = db.get_categories().map_err(ZeroError::DatabaseError)?;
+		self.categories = db.get_categories()?;
 		Ok(())
 	}
 
@@ -472,4 +473,31 @@ enum ZeroError {
 	IOError(std::io::Error),
 	TOMLError(toml::de::Error),
 	StaticAlreadyInit,
+	ReqwestError(reqwest::Error),
+	ParseError,
+	ConfigError(String),
+}
+
+impl From<reqwest::Error> for ZeroError {
+	fn from(value: reqwest::Error) -> Self {
+		ZeroError::ReqwestError(value)
+	}
+}
+
+impl From<rusqlite::Error> for ZeroError {
+	fn from(value: rusqlite::Error) -> Self {
+		ZeroError::DatabaseError(value)
+	}
+}
+
+impl From<std::io::Error> for ZeroError {
+	fn from(value: std::io::Error) -> Self {
+		ZeroError::IOError(value)
+	}
+}
+
+impl From<toml::de::Error> for ZeroError {
+	fn from(value: toml::de::Error) -> Self {
+		ZeroError::TOMLError(value)
+	}
 }
