@@ -6,9 +6,7 @@ use std::{
 
 use crate::VERSION;
 
-use eframe::egui::{
-	Context, Id, RichText, Separator, TextEdit, ViewportBuilder, ViewportId,
-};
+use eframe::egui::{Context, Id, RichText, Separator, TextEdit, ViewportBuilder, ViewportId};
 use toml::{Table, Value};
 
 use crate::{ZeroError, theme::GREEN, update::check_for_updates};

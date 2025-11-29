@@ -296,26 +296,26 @@ fn vanilla_split_names(split: usize) -> &'static str {
 
 fn vanilla_descriptive_split_names(split: usize) -> &'static str {
 	[
-		"Stage 1 Start",
+		"Stage 1 Start", //0
 		"Cloudoos",
 		"Arc Adder",
 		"Catastrophy",
 		"Bonus 1",
-		"Stage 2 Start",
+		"Stage 2 Start", //5
 		"Box Blockade",
 		"Snake",
 		"Artypo",
 		"Skull Taxis",
 		"2nd Apocalypse",
 		"Bonus 2",
-		"Stage 3 Start",
+		"Stage 3 Start", //12
 		"Crab Landing",
 		"Plane",
 		"Crab",
 		"Tank",
 		"Grapefruit",
 		"Bonus 3",
-		"Stage 4 Start",
+		"Stage 4 Start", //19
 		"Left Tunnel",
 		"Maze",
 		"Trains",

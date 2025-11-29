@@ -1,3 +1,5 @@
 Add deleting categories
 Rework the pop up menus
 Add log file and remove terminal window
+Make it more clear that importing uses relative scores or make it accept either
+Fix the reset stage/full reset split detection
