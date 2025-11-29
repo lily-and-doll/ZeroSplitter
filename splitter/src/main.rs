@@ -103,6 +103,7 @@ struct ZeroSplitter {
 	dialog_rx: Receiver<Option<EntryDialogData>>,
 	dialog_tx: Sender<Option<EntryDialogData>>,
 	split_delay: Option<u32>,
+	start_delay: Option<u32>,
 	db: Database,
 	toggles: Toggles,
 }
@@ -121,6 +122,7 @@ impl ZeroSplitter {
 			waiting_for_rename: false,
 			waiting_for_confirm: false,
 			split_delay: None,
+			start_delay: None,
 			db,
 			toggles: Default::default(),
 		};
@@ -207,18 +209,27 @@ impl ZeroSplitter {
 		// Reset if we returned to 1-1
 		if frame.total_score() == 0 && self.last_frame.total_score() > 0 || self.last_frame.is_menu() {
 			self.reset();
-			self.run.start(frame);
-			self.run
-				.set_split(match frame.stage {
-					1 => 0,
-					2 => 5,
-					3 => 12,
-					4 => 19,
-					_ => panic!("Stage out of bounds! {}", frame.stage),
-				})
-				.unwrap();
-			self.categories.refresh_comparison(&self.db).unwrap();
-			return;
+			self.start_delay = Some(1);
+		}
+
+		if let Some(start_delay) = self.start_delay {
+			if start_delay >= 1 {
+				self.start_delay = Some(start_delay - 1)
+			} else {
+				self.run.start(frame);
+				self.run
+					.set_split(match frame.stage {
+						1 => 0,
+						2 => 5,
+						3 => 12,
+						4 => 19,
+						_ => panic!("Stage out of bounds! {}", frame.stage),
+					})
+					.unwrap();
+				self.categories.refresh_comparison(&self.db).unwrap();
+				self.start_delay = None;
+				return;
+			}
 		}
 
 		if !frame.is_menu() && !(self.run == Run::Inactive) {
@@ -228,7 +239,7 @@ impl ZeroSplitter {
 			}
 
 			if let Some(split_delay) = self.split_delay {
-				if split_delay > 1 {
+				if split_delay >= 1 {
 					self.split_delay = Some(split_delay - 1)
 				} else {
 					self.run.split().unwrap();
