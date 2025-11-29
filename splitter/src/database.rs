@@ -6,7 +6,7 @@ use rusqlite::{
 	types::{FromSql, ValueRef},
 };
 
-use crate::{Category, CategoryManager, Gamemode, Run, config::CONFIG};
+use crate::{Category, CategoryManager, Gamemode, Run};
 
 #[derive(Clone)]
 pub struct Database {
@@ -197,17 +197,17 @@ impl Database {
 		let mut statement = self.conn.prepare(include_str!("../sql/pb_splits.sql"))?;
 		let rows = statement.query_map(params![category.id], |row| {
 			Ok((
-				row.get::<usize, i32>(0)?,
-				row.get::<usize, i32>(1)?,
-				row.get::<usize, i32>(2)?,
+				row.get::<usize, i32>(0)?, //score
+				row.get::<usize, Option<i32>>(1)?, //mult
+				row.get::<usize, i32>(2)?, //run_id
 				row.get::<usize, Gamemode>(3)?,
 			))
 		})?;
-		let splits: Vec<(i32, i32, i32, Gamemode)> = rows.map(|r| r.unwrap()).collect();
+		let splits: Vec<(i32, Option<i32>, i32, Gamemode)> = rows.map(|r| r.unwrap()).collect();
 
 		if splits.len() > 0 {
 			let scores: Vec<i32> = splits.iter().map(|s| s.0).collect();
-			let _hits: Vec<i32> = splits.iter().map(|s| s.1).collect();
+			let _hits: Vec<i32> = splits.iter().map(|s| s.1.unwrap_or(0)).collect();
 			let _run_id = splits[0].2;
 			let mode = splits[0].3;
 
