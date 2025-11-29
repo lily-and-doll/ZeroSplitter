@@ -41,7 +41,10 @@ const CURRENT_SCHEMA_VERSION: i32 = 4;
 impl Database {
 	pub fn init() -> Result<Self> {
 		let database = Database {
+			#[cfg(not(test))]
 			conn: Arc::new(Connection::open("./sqlite.db3")?),
+			#[cfg(test)]
+			conn: Arc::new(Connection::open_in_memory()?),
 		};
 
 		// create tables if they don't exist
@@ -197,9 +200,9 @@ impl Database {
 		let mut statement = self.conn.prepare(include_str!("../sql/pb_splits.sql"))?;
 		let rows = statement.query_map(params![category.id], |row| {
 			Ok((
-				row.get::<usize, i32>(0)?, //score
+				row.get::<usize, i32>(0)?,         //score
 				row.get::<usize, Option<i32>>(1)?, //mult
-				row.get::<usize, i32>(2)?, //run_id
+				row.get::<usize, i32>(2)?,         //run_id
 				row.get::<usize, Gamemode>(3)?,
 			))
 		})?;
@@ -348,5 +351,42 @@ impl FromSql for Gamemode {
 			ValueRef::Integer(i) => Err(rusqlite::types::FromSqlError::OutOfRange(i)),
 			_ => Err(rusqlite::types::FromSqlError::InvalidType),
 		}
+	}
+}
+
+#[cfg(test)]
+#[allow(dead_code, unused)]
+mod tests {
+	use std::sync::Arc;
+
+	use rusqlite::Connection;
+
+	use rusqlite::Result;
+
+	use crate::Gamemode;
+	use crate::{
+		Category,
+		database::{self, Database},
+	};
+
+	#[test]
+	fn import_and_get_pb() -> Result<()> {
+		let db = Database::init()?;
+
+		println!("Importing run...");
+		db.import_run(vec![10, 20, 30, 40], &"default".to_string())?;
+
+		let mut categories = crate::CategoryManager {
+			categories: vec![],
+			current: 0,
+			comparison_cache: vec![],
+		};
+		categories.load(&db);
+
+		println!("Getting PB...");
+		let pb = db.get_pb_run(&categories)?;
+
+		assert!(pb.0 == vec![10, 20, 30, 40]);
+		Ok(())
 	}
 }
